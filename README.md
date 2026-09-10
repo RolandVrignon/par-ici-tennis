@@ -11,6 +11,8 @@ Script to automatically book a tennis court in Paris (on https://tennis.paris.fr
 - [Prerequisites](#prerequisites)
 - [Get started](#get-started)
   - [Configuration](#configuration)
+    - [Price types](#price-types)
+    - [Example: free account](#example-free-account)
   - [CAPTCHA recognition](#captcha-recognition)
   - [Ntfy notifications (optional)](#ntfy-notifications-optional)
   - [Payment process](#payment-process)
@@ -61,11 +63,52 @@ Choose the format that best matches your preferences.
 
 - `hours` a list of hours ordered by preference
 
-- `priceType` an array containing price types you can book: `Tarif plein`, `Tarif réduit`, or `Gratuité`. Keep only the types available to your account; the labels must exactly match those displayed in the court's price description. For a free account, use `"priceType": ["Gratuité"]`.
+- `priceType` an array containing the price types accepted for your booking (see [Price types](#price-types)).
 
 - `courtType` an array containing court types you can book `Découvert` and/or `Couvert`
 
 - `players` list of players 3 max (without you)
+
+#### Price types
+
+`Gratuité` is the new supported value for free bookings. Use the exact French label, including the capital letter and accent: `Gratuité`. Values such as `Gratuit`, `gratuit`, or `free` will not match the court listings.
+
+| Exact `priceType` value | Account eligibility | Carnet required by the script |
+| --- | --- | --- |
+| `Tarif plein` | Full-price bookings | Yes, matching the price and court type |
+| `Tarif réduit` | Reduced-price bookings | Yes, matching the price and court type |
+| `Gratuité` | Free bookings enabled on the Paris Tennis account | No |
+
+For a free account, set `"priceType": ["Gratuité"]`. This filters out paid courts. The setting does not grant free-booking eligibility: your Paris Tennis account must already have it.
+
+Keep only the price types you want to accept. `config.json.sample` lists all three supported values as examples; you do not need to keep them all. The order of `priceType` does not rank prices: every listed value is accepted.
+
+#### Example: free account
+
+Save the following as your local `config.json`, replacing the example credentials, partner, courts, and hours with your own:
+
+```json
+{
+  "account": {
+    "email": "your-email@example.com",
+    "password": "YOUR_PARIS_TENNIS_PASSWORD"
+  },
+  "locations": ["Valeyre", "Suzanne Lenglen"],
+  "hours": ["18", "19"],
+  "priceType": ["Gratuité"],
+  "courtType": ["Couvert"],
+  "players": [
+    {
+      "lastName": "PARTNER_LAST_NAME",
+      "firstName": "PARTNER_FIRST_NAME"
+    }
+  ]
+}
+```
+
+This example searches for a covered court six days ahead because `date` is omitted. It uses the default [CAPTCHA recognition](#captcha-recognition) settings and does not require a carnet. The `players` list contains your partners, not the account holder.
+
+Start with `npm run start-dry-headed`. At the payment step, expect `Free price detected`, followed by cancellation. Check that your account has no new reservation before running `npm start` for a real booking. In a real free booking, the script selects the `Gratuité` card and then clicks `Etape suivante`.
 
 ### CAPTCHA recognition
 
