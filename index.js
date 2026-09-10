@@ -5,12 +5,14 @@ import { writeFileSync } from 'fs'
 import { createEvent } from 'ics'
 import { config } from './staticFiles.js'
 import { notify } from './lib/ntfy.js'
+import { waitForStep } from './lib/captcha.js'
 
 dayjs.extend(customParseFormat)
 
 const bookTennis = async () => {
   const DRY_RUN_MODE = process.argv.includes('--dry-run')
   const HEADED_MODE = process.argv.includes('--headed')
+  const captchaOptions = { headed: HEADED_MODE, ai: config.ai }
   if (DRY_RUN_MODE) {
     console.log('----- DRY RUN START -----')
     console.log('Script lancé en mode DRY RUN. Afin de tester votre configuration, une recherche va être lancé mais AUCUNE réservation ne sera réalisée')
@@ -25,26 +27,21 @@ const bookTennis = async () => {
 
   console.log(`${dayjs().format()} - Browser started`)
   const page = await browser.newPage()
-  if (!HEADED_MODE) {
-    await page.route('https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captcha-invisible/invisible-captcha-infos', (route) => route.abort())
-    await page.route('https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captchas**', (route) => route.abort())
-  } else {
-    console.log('If a CAPTCHA appears, solve it manually in the browser. Waiting up to 5 minutes for login and court search.')
-  }
+  let canAbortBooking = false
   page.setDefaultTimeout(90000)
-  await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennis&view=start&full=1')
-
-  await page.click('#button_suivi_inscription')
-  await page.fill('#username', config?.account?.email || process.env.ACCOUNT_EMAIL)
-  await page.fill('#password', config?.account?.password || process.env.ACCOUNT_PASSWORD)
-  await page.click('#form-login >> button')
-
-  // wait for login redirection before continue
-  await page.waitForSelector('.main-informations', { timeout: HEADED_MODE ? 300000 : 90000 })
-
-  console.log(`${dayjs().format()} - User connected`)
-
   try {
+    await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennis&view=start&full=1')
+
+    await page.click('#button_suivi_inscription')
+    await page.fill('#username', config?.account?.email || process.env.ACCOUNT_EMAIL)
+    await page.fill('#password', config?.account?.password || process.env.ACCOUNT_PASSWORD)
+    await page.click('#form-login >> button')
+
+    // wait for login redirection before continue
+    await waitForStep(page, '.main-informations', captchaOptions)
+
+    console.log(`${dayjs().format()} - User connected`)
+
     const locations = !Array.isArray(config.locations) ? Object.keys(config.locations) : config.locations
     locationsLoop:
     for (const [i, location] of locations.entries()) {
@@ -53,7 +50,7 @@ const bookTennis = async () => {
       await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&view=recherche_creneau#!')
 
       // select tennis location
-      await page.waitForSelector('.tokens-input-text', { timeout: HEADED_MODE ? 300000 : 90000 })
+      await waitForStep(page, '.tokens-input-text', captchaOptions)
       await page.locator('.tokens-input-text').pressSequentially(`${location} `)
       await page.waitForSelector(`.tokens-suggestions-list-element >> text="${location}"`)
       await page.click(`.tokens-suggestions-list-element >> text="${location}"`)
@@ -96,6 +93,7 @@ const bookTennis = async () => {
             }
             selectedHour = hour
             await page.click(bookSlotButton)
+            canAbortBooking = true
 
             break hoursLoop
           }
@@ -107,7 +105,7 @@ const bookTennis = async () => {
         continue
       }
 
-      await page.waitForSelector('.order-steps-infos h2 >> text="1 / 3 - Validation du court"')
+      await waitForStep(page, '.order-steps-infos h2 >> text="1 / 3 - Validation du court"', captchaOptions)
 
       for (const [i, player] of config.players.entries()) {
         if (i > 0) {
@@ -120,7 +118,7 @@ const bookTennis = async () => {
 
       await page.keyboard.press('Enter')
 
-      await page.waitForSelector('.order-steps-infos h2 >> text="2 / 3 - Mode de paiement"')
+      await waitForStep(page, '.order-steps-infos h2 >> text="2 / 3 - Mode de paiement"', captchaOptions)
       await page.waitForSelector('.priceTable')
 
       const paymentSummary = await page.locator('.priceTable').innerText()
@@ -145,17 +143,24 @@ const bookTennis = async () => {
         console.log('Pour réellement réserver un crénau, relancez le script sans le paramètre --dry-run')
 
         await page.click('#previous')
-        await page.click('#btnCancelBooking')
+        const [cancelResponse] = await Promise.all([
+          page.waitForResponse(response => response.url().endsWith('/tennis/rest/abortBooking') && response.request().method() === 'POST'),
+          page.click('#btnCancelBooking'),
+        ])
+        if (!cancelResponse.ok()) throw new Error('Dry-run cancellation failed')
+        canAbortBooking = false
 
         break locationsLoop
       }
 
       if (isFreeBooking) {
         await page.locator('.priceTable .price-item[paymentMode="free"]').click()
+        canAbortBooking = false
         await page.locator('.step-two #submit:not(.disabled)').click()
       } else {
         const submit = page.locator('#order_select_payment_form #envoyer')
         await submit.evaluate(el => el.classList.remove('hide'))
+        canAbortBooking = false
         await submit.click()
       }
 
@@ -215,6 +220,16 @@ const bookTennis = async () => {
     if (!page.isClosed()) {
       const screenshot = await page.screenshot({ path: 'img/failure.png' })
 
+      // Release only this run's temporary hold, never a submitted reservation.
+      if (canAbortBooking) {
+        try {
+          const response = await page.request.post('https://tennis.paris.fr/tennis/rest/abortBooking', { timeout: 10000 })
+          console.log(response.ok() ? 'Pending booking abandoned after failure' : 'Could not abandon the pending booking; check your account')
+        } catch {
+          console.log('Could not abandon the pending booking; check your account')
+        }
+      }
+
       if (config.ntfy?.enable === true || process.env.NTFY_TOPIC) {
         await notify(screenshot, 'failure.png', 'Erreur lors de l\'execution du programme.', {
           domain: config?.ntfy?.domain || process.env.NTFY_DOMAIN,
@@ -222,9 +237,9 @@ const bookTennis = async () => {
         })
       }
     }
+  } finally {
+    await browser.close()
   }
-
-  await browser.close()
 }
 
 bookTennis()

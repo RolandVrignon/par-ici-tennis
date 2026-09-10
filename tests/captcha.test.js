@@ -1,0 +1,108 @@
+import assert from 'node:assert/strict'
+import { after, before, test } from 'node:test'
+import { chromium } from 'playwright'
+import { Client } from '@gradio/client'
+import { waitForStep } from '../lib/captcha.js'
+import { huggingFaceAPI } from '../lib/huggingface.js'
+
+let browser
+before(async () => { browser = await chromium.launch({ headless: true }) })
+after(async () => { await browser?.close() })
+
+const fixture = async (t) => {
+  const page = await browser.newPage()
+  t.after(() => page.close())
+  const src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><rect width="100" height="40" fill="white"/><text x="5" y="25">AbC4</text></svg>')
+  await page.setContent('<button id="proceed" hidden onclick="document.querySelector(\'.ready\').hidden=false">Poursuivre la réservation</button><div class="ready" hidden>Booking step</div>')
+  await page.evaluate(html => {
+    const frame = globalThis.document.createElement('iframe')
+    frame.srcdoc = html
+    globalThis.document.body.append(frame)
+  }, `<div id="li-antibot-questions-container"><img src="${src}"></div>
+    <input id="li-antibot-answer"><button id="li-antibot-validate" onclick="
+      if(document.querySelector('input').value==='AbC4') {
+        parent.document.querySelector('#proceed').hidden=false;
+      } else {
+        document.querySelector('img').style.width=(100+(++window.rejected)*10)+'px';
+      }
+    ">Validate</button><script>window.rejected=0</script>`)
+  await page.frameLocator('iframe').locator('#li-antibot-answer').waitFor()
+  return page
+}
+
+test('no CAPTCHA makes no inference call', async t => {
+  const page = await browser.newPage()
+  t.after(() => page.close())
+  await page.setContent('<div class="ready">Booking step</div>')
+  await waitForStep(page, '.ready', {}, () => assert.fail('Unexpected inference'))
+})
+
+test('recognized text unlocks continuation without confirming a booking', async t => {
+  const page = await fixture(t)
+  let calls = 0
+  await waitForStep(page, '.ready', { timeoutMs: 5000 }, async blob => {
+    calls++
+    assert.equal(blob.type, 'image/png')
+    assert.ok(blob.size > 0)
+    return 'AbC4'
+  })
+  assert.equal(calls, 1)
+  assert.equal(await page.locator('.ready').isVisible(), true)
+})
+
+test('rejected answers stop after two attempts in headless mode', async t => {
+  const page = await fixture(t)
+  let calls = 0
+  await assert.rejects(waitForStep(page, '.ready', { timeoutMs: 5000 }, async () => {
+    calls++
+    return 'Wrong'
+  }), /attempt limit reached/)
+  assert.equal(calls, 2)
+  assert.equal(await page.locator('.ready').isVisible(), false)
+})
+
+test('provider failure allows manual completion in headed mode', async t => {
+  const page = await fixture(t)
+  let signalFailure
+  const failed = new Promise(resolve => { signalFailure = resolve })
+  const waiting = waitForStep(page, '.ready', { headed: true, timeoutMs: 5000 }, async () => {
+    signalFailure()
+    throw new Error('Space unavailable')
+  })
+  await failed
+  await page.frameLocator('iframe').locator('#li-antibot-answer').fill('AbC4')
+  await page.frameLocator('iframe').locator('#li-antibot-validate').click()
+  await waiting
+  assert.equal(await page.locator('.ready').isVisible(), true)
+})
+
+test('disabled recognition stops headless mode without contacting HF', async t => {
+  const page = await fixture(t)
+  await assert.rejects(waitForStep(page, '.ready', { ai: { enable: false }, timeoutMs: 2000 }, () => assert.fail('Unexpected inference')), /recognition is disabled/)
+})
+
+test('HF adapter preserves four-character mixed-case answers and closes its client', async t => {
+  let closed = false
+  t.mock.method(Client, 'connect', async () => ({
+    predict: async (endpoint, data) => {
+      assert.equal(endpoint, '/predict')
+      assert.ok(data.input instanceof Blob)
+      return { data: [' AbC4 '] }
+    },
+    close: () => { closed = true },
+  }))
+  assert.equal(await huggingFaceAPI(new Blob(['image'])), 'AbC4')
+  assert.equal(closed, true)
+})
+
+test('HF adapter rejects prose instead of submitting it as an answer', async t => {
+  t.mock.method(Client, 'connect', async () => ({ predict: async () => ({ data: ['Service unavailable'] }), close: () => {} }))
+  await assert.rejects(huggingFaceAPI(new Blob(['image'])), /invalid CAPTCHA answer/)
+})
+
+test('HF inference has a bounded timeout and closes the client', async t => {
+  let closed = false
+  t.mock.method(Client, 'connect', async () => ({ predict: () => new Promise(() => {}), close: () => { closed = true } }))
+  await assert.rejects(huggingFaceAPI(new Blob(['image']), { timeoutMs: 1000 }), /timed out/)
+  assert.equal(closed, true)
+})

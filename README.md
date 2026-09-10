@@ -4,13 +4,14 @@ Script to automatically book a tennis court in Paris (on https://tennis.paris.fr
 
 > "Par ici" mean "this way" in french. The "Parisii" were a Gallic tribe that dwelt on the banks of the river Seine. They lived on lands now occupied by the modern city of Paris. The project name can be interpreted as "For a Parisian tennis, follow this way"
 
-**NOTE**: They added a CAPTCHA during the reservation process. The latest version **should** pass through. If it fails, open an issue with error logs, I will try to find another way.
+**NOTE**: Text CAPTCHAs are recognized through a Hugging Face Space only when they appear. Recognition is best effort: public Spaces may sleep or become unavailable. Use the visible browser mode for manual fallback.
 
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
 - [Get started](#get-started)
   - [Configuration](#configuration)
+  - [CAPTCHA recognition](#captcha-recognition)
   - [Ntfy notifications (optional)](#ntfy-notifications-optional)
   - [Payment process](#payment-process)
   - [Running](#running)
@@ -65,6 +66,25 @@ Choose the format that best matches your preferences.
 - `courtType` an array containing court types you can book `Découvert` and/or `Couvert`
 
 - `players` list of players 3 max (without you)
+
+### CAPTCHA recognition
+
+The script uses [Nischay103/captcha_recognition](https://huggingface.co/spaces/Nischay103/captcha_recognition) when a supported LiveIdentity text CAPTCHA appears. It sends only the CAPTCHA image to this third-party Space, never your account credentials or the whole page. No Hugging Face request is made when there is no CAPTCHA.
+
+```json
+"ai": {
+  "enable": true,
+  "space": "Nischay103/captcha_recognition",
+  "maxAttempts": 2,
+  "timeoutMs": 30000
+}
+```
+
+These are the defaults when `ai` is omitted. Set `enable` to `false` for manual entry only. An alternative Space must expose the Gradio `/predict` endpoint with an `input` image and a text result. Answers retain their original case and length. Attempts are capped at three and provider calls at 60 seconds.
+
+CAPTCHA network requests are allowed in both browser modes. In `--headed` mode, failed recognition falls back to manual entry within the five-minute step timeout. In headless mode, failed recognition stops the run with an error. The script continues only after the site accepts the CAPTCHA; it does not support image-selection puzzles or guarantee unattended bookings.
+
+If recognition fails after this run selected a court, the script attempts to release its temporary hold. It never automatically cancels a submitted reservation. Run `npm test` for local CAPTCHA regression tests and `npm run start-dry-headed` to validate against your account.
 
 ### Ntfy notifications (optional)
 
@@ -126,7 +146,7 @@ To observe the dry-run in a visible browser, with slower interactions:
 npm run start-dry-headed
 ```
 
-In visible browser mode, CAPTCHA requests are allowed. If a CAPTCHA appears during login or before the court search, solve it manually in the browser; the script waits up to five minutes for each of those steps. This does not guarantee unattended CAPTCHA handling in headless mode.
+In visible browser mode, you can solve the CAPTCHA manually if automatic recognition fails. The script waits up to five minutes for each login, search, or booking step.
 
 Before running a real booking, check that the dry-run reaches the payment step, logs `Free price detected` for `Gratuité`, and cancels successfully. Verify that no reservation remains in your Paris Tennis account.
 
