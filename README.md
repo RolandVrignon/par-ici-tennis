@@ -96,7 +96,7 @@ Notification example:
 
 For `Tarif plein` and `Tarif réduit`, you need a "carnet de réservation" that matches your `priceType` & `courtType` [combination](https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=rate&view=les_tarifs) selected previously.
 
-For an account eligible for `Gratuité`, no carnet is required. The script detects `Gratuité` in the payment summary and uses the "Etape suivante" button without accessing the paid payment field. Dry-run mode cancels the booking before confirmation for both free and paid bookings.
+For an account eligible for `Gratuité`, no carnet is required. The script detects `Gratuité` in the payment summary, selects the free price card to activate the "Etape suivante" button, and clicks that button without directly accessing the paid payment field. Dry-run mode cancels the booking before confirmation for both free and paid bookings.
 
 ### Running
 

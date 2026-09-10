@@ -151,7 +151,8 @@ const bookTennis = async () => {
       }
 
       if (isFreeBooking) {
-        await page.locator('.step-two').getByText('Etape suivante', { exact: true }).click()
+        await page.locator('.priceTable .price-item[paymentMode="free"]').click()
+        await page.locator('.step-two #submit:not(.disabled)').click()
       } else {
         const submit = page.locator('#order_select_payment_form #envoyer')
         await submit.evaluate(el => el.classList.remove('hide'))
