@@ -18,7 +18,8 @@
   ],
   "priceType": [
     "Tarif plein",
-    "Tarif réduit"
+    "Tarif réduit",
+    "Gratuité"
   ],
   "courtType": [
     "Découvert",

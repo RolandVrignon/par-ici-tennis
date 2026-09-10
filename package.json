@@ -23,6 +23,7 @@
     "postinstall": "npx playwright install chromium",
     "start": "node index.js",
     "start-dry": "node index.js --dry-run",
+    "start-dry-headed": "node index.js --dry-run --headed",
     "wait": "node scripts/wait-8-am.js",
     "eslint": "eslint ."
   },

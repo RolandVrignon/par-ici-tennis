@@ -21,13 +21,15 @@ Script to automatically book a tennis court in Paris (on https://tennis.paris.fr
 
 ## Prerequisites
 - Node.js >= 20.6.x
-- A "carnet de réservation" in your Paris Tennis account (see [Payment process](#payment-process))
+- A "carnet de réservation" in your Paris Tennis account for `Tarif plein` or `Tarif réduit`. No carnet is needed for an account eligible for `Gratuité` (see [Payment process](#payment-process)).
 
 ## Get started
 
 ### Configuration
 
 Create `config.json` file from `config.json.sample` and complete with your preferences.
+
+Never commit `config.json`: it contains your account credentials and is excluded by `.gitignore`.
 
 - `location`: a list of courts ordered by preference - [full list](https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennisParisien&view=les_tennis_parisiens)
 
@@ -58,7 +60,7 @@ Choose the format that best matches your preferences.
 
 - `hours` a list of hours ordered by preference
 
-- `priceType` an array containing price types you can book `Tarif plein` and/or `Tarif réduit`
+- `priceType` an array containing price types you can book: `Tarif plein`, `Tarif réduit`, or `Gratuité`. Keep only the types available to your account; the labels must exactly match those displayed in the court's price description. For a free account, use `"priceType": ["Gratuité"]`.
 
 - `courtType` an array containing court types you can book `Découvert` and/or `Couvert`
 
@@ -92,7 +94,9 @@ Notification example:
 
 ### Payment process
 
-To pass the payment phase without trouble you need a "carnet de réservation", be careful you need a "carnet" that matches your `priceType` & `courtType` [combination](https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=rate&view=les_tarifs) selected previously
+For `Tarif plein` and `Tarif réduit`, you need a "carnet de réservation" that matches your `priceType` & `courtType` [combination](https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=rate&view=les_tarifs) selected previously.
+
+For an account eligible for `Gratuité`, no carnet is required. The script detects `Gratuité` in the payment summary and uses the "Etape suivante" button without accessing the paid payment field. Dry-run mode cancels the booking before confirmation for both free and paid bookings.
 
 ### Running
 
@@ -115,6 +119,16 @@ To test your configuration, you can run this project in dry-run mode. It will ch
 ```sh
 npm run start-dry
 ```
+
+To observe the dry-run in a visible browser, with slower interactions:
+
+```sh
+npm run start-dry-headed
+```
+
+In visible browser mode, CAPTCHA requests are allowed. If a CAPTCHA appears during login or before the court search, solve it manually in the browser; the script waits up to five minutes for each of those steps. This does not guarantee unattended CAPTCHA handling in headless mode.
+
+Before running a real booking, check that the dry-run reaches the payment step, logs `Free price detected` for `Gratuité`, and cancels successfully. Verify that no reservation remains in your Paris Tennis account.
 
 You can start the script automatically using cron or equivalent
 

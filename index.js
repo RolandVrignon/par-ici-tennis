@@ -10,18 +10,27 @@ dayjs.extend(customParseFormat)
 
 const bookTennis = async () => {
   const DRY_RUN_MODE = process.argv.includes('--dry-run')
+  const HEADED_MODE = process.argv.includes('--headed')
   if (DRY_RUN_MODE) {
     console.log('----- DRY RUN START -----')
     console.log('Script lancé en mode DRY RUN. Afin de tester votre configuration, une recherche va être lancé mais AUCUNE réservation ne sera réalisée')
   }
 
   console.log(`${dayjs().format()} - Starting searching tennis`)
-  const browser = await chromium.launch({ headless: true, slowMo: 0, timeout: 90000 })
+  const browser = await chromium.launch({
+    headless: !HEADED_MODE,
+    slowMo: HEADED_MODE ? 250 : 0,
+    timeout: 90000,
+  })
 
   console.log(`${dayjs().format()} - Browser started`)
   const page = await browser.newPage()
-  await page.route('https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captcha-invisible/invisible-captcha-infos', (route) => route.abort())
-  await page.route('https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captchas**', (route) => route.abort())
+  if (!HEADED_MODE) {
+    await page.route('https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captcha-invisible/invisible-captcha-infos', (route) => route.abort())
+    await page.route('https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captchas**', (route) => route.abort())
+  } else {
+    console.log('If a CAPTCHA appears, solve it manually in the browser. Waiting up to 5 minutes for login and court search.')
+  }
   page.setDefaultTimeout(90000)
   await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennis&view=start&full=1')
 
@@ -30,10 +39,10 @@ const bookTennis = async () => {
   await page.fill('#password', config?.account?.password || process.env.ACCOUNT_PASSWORD)
   await page.click('#form-login >> button')
 
-  console.log(`${dayjs().format()} - User connected`)
-
   // wait for login redirection before continue
-  await page.waitForSelector('.main-informations')
+  await page.waitForSelector('.main-informations', { timeout: HEADED_MODE ? 300000 : 90000 })
+
+  console.log(`${dayjs().format()} - User connected`)
 
   try {
     const locations = !Array.isArray(config.locations) ? Object.keys(config.locations) : config.locations
@@ -44,6 +53,7 @@ const bookTennis = async () => {
       await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&view=recherche_creneau#!')
 
       // select tennis location
+      await page.waitForSelector('.tokens-input-text', { timeout: HEADED_MODE ? 300000 : 90000 })
       await page.locator('.tokens-input-text').pressSequentially(`${location} `)
       await page.waitForSelector(`.tokens-suggestions-list-element >> text="${location}"`)
       await page.click(`.tokens-suggestions-list-element >> text="${location}"`)
@@ -110,13 +120,23 @@ const bookTennis = async () => {
 
       await page.keyboard.press('Enter')
 
-      await page.waitForSelector('#order_select_payment_form #paymentMode', { state: 'attached' })
-      const paymentMode = page.locator('#order_select_payment_form #paymentMode')
-      await paymentMode.evaluate(el => {
-        el.removeAttribute('readonly')
-        el.style.display = 'block'
-      })
-      await paymentMode.fill('existingTicket')
+      await page.waitForSelector('.order-steps-infos h2 >> text="2 / 3 - Mode de paiement"')
+      await page.waitForSelector('.priceTable')
+
+      const paymentSummary = await page.locator('.priceTable').innerText()
+      const isFreeBooking = paymentSummary.includes('Gratuité')
+
+      if (!isFreeBooking) {
+        const paymentMode = page.locator('#order_select_payment_form #paymentMode')
+        await paymentMode.waitFor({ state: 'attached' })
+        await paymentMode.evaluate(el => {
+          el.removeAttribute('readonly')
+          el.style.display = 'block'
+        })
+        await paymentMode.fill('existingTicket')
+      } else {
+        console.log(`${dayjs().format()} - Free price detected`)
+      }
 
       if (DRY_RUN_MODE) {
         console.log(`${dayjs().format()} - Fausse réservation faite : ${logLocation}`)
@@ -130,9 +150,13 @@ const bookTennis = async () => {
         break locationsLoop
       }
 
-      const submit = page.locator('#order_select_payment_form #envoyer')
-      await submit.evaluate(el => el.classList.remove('hide'))
-      await submit.click()
+      if (isFreeBooking) {
+        await page.locator('.step-two').getByText('Etape suivante', { exact: true }).click()
+      } else {
+        const submit = page.locator('#order_select_payment_form #envoyer')
+        await submit.evaluate(el => el.classList.remove('hide'))
+        await submit.click()
+      }
 
       await page.waitForSelector('.confirmReservation')
 
@@ -186,13 +210,16 @@ const bookTennis = async () => {
     }
   } catch (e) {
     console.log(e)
-    const screenshot = await page.screenshot({ path: 'img/failure.png' })
+    process.exitCode = 1
+    if (!page.isClosed()) {
+      const screenshot = await page.screenshot({ path: 'img/failure.png' })
 
-    if (config.ntfy?.enable === true || process.env.NTFY_TOPIC) {
-      await notify(screenshot, 'failure.png', 'Erreur lors de l\'execution du programme.', {
-        domain: config?.ntfy?.domain || process.env.NTFY_DOMAIN,
-        topic: config?.ntfy?.topic || process.env.NTFY_TOPIC,
-      })
+      if (config.ntfy?.enable === true || process.env.NTFY_TOPIC) {
+        await notify(screenshot, 'failure.png', 'Erreur lors de l\'execution du programme.', {
+          domain: config?.ntfy?.domain || process.env.NTFY_DOMAIN,
+          topic: config?.ntfy?.topic || process.env.NTFY_TOPIC,
+        })
+      }
     }
   }
 
