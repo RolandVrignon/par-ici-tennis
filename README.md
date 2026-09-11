@@ -1,8 +1,8 @@
 <div align="center">
 
-![Par ici Tennis — Moins de refresh. Plus de revers.](docs/assets/par-ici-tennis-hero.svg)
+![Tenibotty — Moins de refresh. Plus de revers.](docs/assets/tenibotty-hero.svg)
 
-# Par ici Tennis
+# Paris Tennis · Tenibotty
 
 **Ton prochain échange commence par un message.**
 
@@ -11,7 +11,7 @@ et gère ta réservation depuis un terminal ou ton bot Telegram avec Hermes.
 
 **Gratuité compatible · Clubs par arrondissement · Tentatives à 8 h · Calendrier ICS · Open source**
 
-[Démarrer](#demarrer) · [Voir les exemples Telegram](#telegram) · [Guide complet](docs/guide.md) · [Signaler un problème](https://github.com/RolandVrignon/par-ici-tennis/issues)
+[Démarrer](#demarrer) · [Voir les exemples Telegram](#telegram) · [Guide complet](docs/guide.md) · [Signaler un problème](https://github.com/RolandVrignon/paris-tennis-tenibotty/issues)
 
 </div>
 
@@ -21,7 +21,7 @@ et gère ta réservation depuis un terminal ou ton bot Telegram avec Hermes.
 
 Trouver le nom exact du centre. Vérifier les courts couverts. Se rappeler l’ouverture. Refaire la recherche quand ton premier choix est complet.
 
-**Par ici Tennis prend en charge cette préparation.** Tu choisis les clubs, les horaires et les partenaires ; le script cherche dans ton ordre de préférence, ajoute les joueurs et suit le parcours de réservation de ton compte.
+**Tenibotty prend en charge cette préparation.** Tu choisis les clubs, les horaires et les partenaires ; le script cherche dans ton ordre de préférence, ajoute les joueurs et suit le parcours de réservation de ton compte.
 
 > « Je veux jouer lundi prochain à 18 h, sinon 19 h. Max Rousié d’abord, Jesse Owens ensuite, en couvert, avec Paul Dupont. Programme la tentative à l’ouverture. »
 
@@ -46,7 +46,7 @@ Avec Hermes, la demande devient une tentative ponctuelle sur ton VPS. Tu peux en
 <a id="fonctionnalites"></a>
 ## Un partenaire pour la réservation
 
-| Tu veux… | Par ici Tennis s’en charge |
+| Tu veux… | Tenibotty s’en charge |
 | --- | --- |
 | **Trouver un centre près de chez toi** | Consulte le catalogue officiel et filtre les clubs par arrondissement. |
 | **Utiliser le bon nom** | Résout les accents et la casse, propose les correspondances et signale les ambiguïtés. |
@@ -190,8 +190,8 @@ Ce paramètre ne change pas tes droits sur Paris Tennis. Le libellé est exact :
 **Prérequis : Node.js 22.22.2 ou 24, npm et un compte Paris Tennis.** Le catalogue des clubs peut être consulté sans compte. Un navigateur visible nécessite une session graphique.
 
 ```sh
-git clone https://github.com/RolandVrignon/par-ici-tennis.git
-cd par-ici-tennis
+git clone https://github.com/RolandVrignon/paris-tennis-tenibotty.git
+cd paris-tennis-tenibotty
 npm ci
 ```
 
@@ -305,7 +305,7 @@ Les configurations, partenaires, journaux et captures restent privés et ignoré
 | Exécuter depuis GitHub Actions | [Workflows et secrets](docs/guide.md#github-actions) |
 | Diagnostiquer un échec | [Diagnostic et validation](docs/guide.md#diagnostic-et-validation) |
 
-Une idée, un parcours qui change ou un problème reproductible ? Ouvre une [issue](https://github.com/RolandVrignon/par-ici-tennis/issues) ou une [pull request](https://github.com/RolandVrignon/par-ici-tennis/pulls), avec les étapes utiles et sans données privées.
+Une idée, un parcours qui change ou un problème reproductible ? Ouvre une [issue](https://github.com/RolandVrignon/paris-tennis-tenibotty/issues) ou une [pull request](https://github.com/RolandVrignon/paris-tennis-tenibotty/pulls), avec les étapes utiles et sans données privées.
 
 ```sh
 npm run eslint
@@ -322,6 +322,6 @@ Ce fork prolonge le travail de [Bertrand d’Aure](https://github.com/bertrandda
 
 **La réservation se prépare ici. Le match se joue sur le court.**
 
-[Démarrer](#demarrer) · [Ouvrir le guide](docs/guide.md) · [Voir le code](https://github.com/RolandVrignon/par-ici-tennis)
+[Démarrer](#demarrer) · [Ouvrir le guide](docs/guide.md) · [Voir le code](https://github.com/RolandVrignon/paris-tennis-tenibotty)
 
 </div>

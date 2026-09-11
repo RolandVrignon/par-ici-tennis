@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" role="img" aria-labelledby="title desc">
-  <title id="title">Par ici Tennis — Moins de refresh. Plus de revers.</title>
+  <title id="title">Tenibotty — Moins de refresh. Plus de revers.</title>
   <desc id="desc">Bannière sur fond vert profond, texte crème et orange, terrain de tennis terre battue et balle jaune. Tes clubs, tes horaires, ton prochain échange.</desc>
   <defs>
     <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#10251f"/><stop offset="1" stop-color="#20382b"/></linearGradient>
@@ -12,7 +12,7 @@
   <g font-family="Arial, Helvetica, sans-serif">
     <rect x="64" y="52" width="136" height="30" rx="15" fill="#ffa874"/>
     <text x="132" y="72" text-anchor="middle" fill="#203127" font-size="12" font-weight="700" letter-spacing="2">PARIS · TENNIS</text>
-    <text x="64" y="154" fill="#fcf5df" font-size="58" font-weight="800" letter-spacing="-2">par ici tennis<tspan fill="#ffa874">.</tspan></text>
+    <text x="64" y="154" fill="#fcf5df" font-size="58" font-weight="800" letter-spacing="-2">tenibotty<tspan fill="#ffa874">.</tspan></text>
     <text x="64" y="229" fill="#fcf5df" font-size="42" font-weight="700" letter-spacing="-1">Moins de refresh.</text>
     <text x="64" y="280" fill="#ffa874" font-size="42" font-weight="700" letter-spacing="-1">Plus de revers.</text>
     <text x="64" y="331" fill="#c1cfbf" font-size="19">Tes clubs. Tes horaires. Ton prochain échange.</text>

@@ -1,22 +1,22 @@
 {
-  "name": "par-ici-tennis",
+  "name": "paris-tennis-tenibotty",
   "version": "1.0.0",
-  "description": "Script to book tennis court in Paris automatically",
+  "description": "Book Paris Tennis courts, schedule opening-time attempts and manage reservations with Hermes and Telegram",
   "keywords": [
     "automation",
     "sport",
     "tennis",
     "padel"
   ],
-  "homepage": "https://github.com/bertrandda/par-ici-tennis",
-  "bugs": "https://github.com/bertrandda/par-ici-tennis/issues",
+  "homepage": "https://github.com/RolandVrignon/paris-tennis-tenibotty",
+  "bugs": "https://github.com/RolandVrignon/paris-tennis-tenibotty/issues",
   "main": "index.js",
   "author": "Bertrand d'Aure",
   "license": "MIT",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bertrandda/par-ici-tennis.git"
+    "url": "git+https://github.com/RolandVrignon/paris-tennis-tenibotty.git"
   },
   "packageManager": "npm@11.6.2",
   "scripts": {

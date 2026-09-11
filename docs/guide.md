@@ -1,4 +1,4 @@
-# Guide complet — Par ici Tennis
+# Guide complet — Paris Tennis / Tenibotty
 
 [← Retour à la présentation](../README.md)
 
@@ -49,8 +49,8 @@ Prérequis :
 - Sous Linux, `flock` pour les scripts de lancement Hermes. Le mode navigateur visible nécessite une session graphique.
 
 ```sh
-git clone URL_DE_VOTRE_FORK
-cd par-ici-tennis
+git clone https://github.com/RolandVrignon/paris-tennis-tenibotty.git
+cd paris-tennis-tenibotty
 npm ci
 ```
 
@@ -279,7 +279,7 @@ Une fois la demande validée, son exécution est volontairement déterministe : 
 Depuis le clone présent sur le VPS :
 
 ```sh
-cd /chemin/vers/par-ici-tennis
+cd /chemin/vers/paris-tennis-tenibotty
 npm run hermes:install
 ```
 
