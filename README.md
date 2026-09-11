@@ -1,6 +1,6 @@
 # par-ici-tennis
 
-Réserver et gérer des courts sur [Paris Tennis](https://tennis.paris.fr/), depuis un terminal ou avec **Hermes et Telegram sur un VPS**.
+Réserver et gérer des courts sur [Paris Tennis](https://tennis.paris.fr/), depuis un terminal ou avec le **pilotage agentique d’Hermes dans Telegram sur un VPS**.
 
 Ce fork de [bertrandda/par-ici-tennis](https://github.com/bertrandda/par-ici-tennis) ajoute le tarif **Gratuité**, la vérification des clubs dans le catalogue officiel, les commandes de gestion du compte et les demandes de réservation programmées avec Hermes.
 
@@ -23,7 +23,7 @@ Ce fork de [bertrandda/par-ici-tennis](https://github.com/bertrandda/par-ici-ten
 
 ## Fonctionnalités
 
-| Besoin | Commande principale |
+| Besoin | Commande ou interface principale |
 | --- | --- |
 | Trouver un club et son libellé exact | `npm run clubs:find -- --query "max rousie"` |
 | Lister les clubs d’un arrondissement | `npm run clubs:list -- --arrondissement 18` |
@@ -33,6 +33,7 @@ Ce fork de [bertrandda/par-ici-tennis](https://github.com/bertrandda/par-ici-ten
 | Prévisualiser ou confirmer une annulation | `npm run reservations:cancel -- --id 'ID_RETOURNE'` |
 | Lister les demandes de réservation programmées | `npm run booking:list` |
 | Installer le skill Hermes | `npm run hermes:install` |
+| Piloter les réservations en langage naturel | Discuter avec Hermes dans Telegram |
 
 Une **réservation du compte** existe déjà sur Paris Tennis. Une **demande programmée** décrit une tentative future : elle ne garantit pas qu’un terrain sera disponible. Les commandes `reservations:*` et `booking:*` gèrent respectivement ces deux objets.
 
@@ -46,7 +47,7 @@ Prérequis :
 - Sous Linux, `flock` pour les scripts de lancement Hermes. Le mode navigateur visible nécessite une session graphique.
 
 ```sh
-git clone https://github.com/RolandVrignon/par-ici-tennis.git
+git clone URL_DE_VOTRE_FORK
 cd par-ici-tennis
 npm ci
 ```
@@ -257,13 +258,26 @@ Si la référence a changé, si le site interdit l’annulation ou si le résult
 
 ## Utiliser Hermes et Telegram
 
+Hermes transforme une demande en langage naturel en opération contrôlée. Ce n’est pas un simple raccourci vers `npm start` : l’agent comprend l’intention, demande uniquement les informations manquantes, consulte les données Paris Tennis, conserve le contexte de la conversation et orchestre les commandes du dépôt.
+
+Son parcours agentique est le suivant :
+
+1. comprendre la demande, y compris les dates relatives et l’ordre des préférences ;
+2. calculer la première date réservable à **J+7** en heure de Paris ;
+3. vérifier les clubs dans le catalogue officiel et signaler toute ambiguïté ;
+4. compléter la demande au fil du dialogue sans redemander les informations déjà fournies ;
+5. présenter un récapitulatif précis et obtenir la confirmation avant toute action réelle ;
+6. préparer la configuration temporaire et programmer une seule exécution à l’ouverture ;
+7. restituer le résultat dans le chat Telegram et indiquer clairement les situations à vérifier.
+
+Une fois la demande validée, son exécution est volontairement déterministe : le job ponctuel utilise les paramètres confirmés avec `no_agent=true`. Aucun modèle ne réinterprète la réservation au moment critique.
+
 ### Installer le skill sur le VPS
 
-Sur l’installation `dev-station` :
+Depuis le clone présent sur le VPS :
 
 ```sh
-ssh dev-station
-cd /home/rolexx/par-ici-tennis
+cd /chemin/vers/par-ici-tennis
 npm run hermes:install
 ```
 
@@ -275,25 +289,51 @@ Pour vérifier sa présence :
 hermes skills list
 ```
 
-Si `npm` est introuvable dans une session SSH utilisant l’installation fnm de ce VPS :
+L’installateur injecte automatiquement le chemin absolu du clone courant dans la copie locale du skill. Le fichier versionné reste donc portable et ne contient aucun chemin utilisateur. `HERMES_HOME` permet de choisir un autre dossier Hermes. Node.js et npm doivent être accessibles dans le `PATH` de l’utilisateur qui exécute l’installation.
 
-```sh
-export PATH="/home/rolexx/.local/share/fnm/aliases/default/bin:$PATH"
-```
+### Exemples de conversations agentiques
 
-Le skill livré cible `/home/rolexx/par-ici-tennis`. Adapter ce chemin dans le skill pour une autre installation ; `HERMES_HOME` permet de choisir le dossier Hermes.
+#### Partir d’une demande incomplète
 
-### Exemples de demandes
+> **Vous —** Je peux réserver un terrain ?
+>
+> **Hermes —** Oui. Donne-moi :
+>
+> - **La date** (à partir du 18/09) et **les horaires souhaités**, par ordre de préférence.
+> - Les **centres**, par ordre de préférence.
+> - **Couvert, découvert ou indifférent**.
+> - Le **prénom et le nom des partenaires** (1 à 3, sans te compter).
 
-- « Quels clubs dans le 18e ? »
+Dans cet exemple, la conversation a lieu le 11/09. Hermes ne conserve pas cette date en dur : il recalcule automatiquement le libellé « à partir du JJ/MM » à J+7 pour chaque nouvelle conversation.
+
+#### Compléter, vérifier et confirmer
+
+> **Vous —** Le 21 septembre à 18 h, sinon 19 h. Max Rousié, en couvert, avec Paul Dupont.
+>
+> **Hermes —** J’ai vérifié le libellé officiel **Max Rousié**. Je programmerai une tentative pour le **21/09 à 18 h**, puis **19 h** en second choix, en **couvert**, avec **Paul Dupont**. Les créneaux ouvrent le **15/09 à 8 h** ; le job sera préparé à **7 h 55**. Dois-je confirmer cette programmation ?
+
+Hermes ne programme rien avant la confirmation. Une fois celle-ci reçue, il crée la demande protégée, programme le job ponctuel, attache son identifiant et confirme ce qui a réellement été enregistré.
+
+#### Modifier une demande en conservant le contexte
+
+> **Vous —** Finalement, mets 19 h en premier et ajoute Jesse Owens en deuxième choix.
+>
+> **Hermes —** Je conserve la date, le type de court et le partenaire. Nouvelle priorité des horaires : **19 h**, puis **18 h**. Ordre des centres : **Max Rousié**, puis **Jesse Owens**. Je vérifie le second club et te présente le récapitulatif avant de modifier la demande programmée.
+
+L’agent réutilise les paramètres déjà confirmés, vérifie la nouvelle information et ne modifie que la demande identifiée. Un changement de date entraîne la création contrôlée d’un nouveau job plutôt que le déplacement silencieux de l’ancien.
+
+#### Interroger et agir sur l’état réel
+
+Quelques formulations possibles :
+
+- « Quels clubs Paris Tennis sont dans le 18e ? »
 - « Est-ce que Max Rousié existe ? »
 - « Liste mes réservations sur Paris Tennis. »
+- « Quelles demandes ai-je programmées ? »
 - « Annule ma réservation de mardi à 18 h. »
-- « Réserve Max Rousié le 21 septembre 2026 à 18 h, en couvert, avec Paul Dupont. » — remplacer la date par la date souhaitée.
-- « Passe ma demande programmée à 19 h. »
-- « Annule ma demande programmée. »
+- « Annule ma demande programmée pour le 21 septembre. »
 
-Hermes vérifie le club et recueille les paramètres manquants. Avant une action réelle, il s’appuie sur l’autorisation explicite de l’utilisateur pour la demande identifiée ; les ambiguïtés doivent être levées. Il utilise les commandes du dépôt plutôt que de construire son propre parcours de réservation.
+Hermes distingue une réservation déjà présente sur le compte d’une tentative future programmée. Avant une action réelle, il résout précisément l’objet concerné, lève les ambiguïtés et s’appuie sur l’autorisation explicite de l’utilisateur. Il utilise les commandes sécurisées du dépôt plutôt que d’inventer son propre parcours de réservation.
 
 ### Déroulement d’une réservation programmée
 
@@ -360,7 +400,7 @@ Si la création du cron a échoué, supprimer une demande encore `prepared` avec
 npm run booking:manage -- cleanup --request-id 'ID_DE_DEMANDE'
 ```
 
-`booking:list` affiche les dossiers gérés par ce helper. Il ne recense pas les crons Linux ou les autres tâches Hermes. Le script historique [run-booking-2026-09-15.sh](scripts/run-booking-2026-09-15.sh), daté et propre au VPS, reste séparé ; utiliser le gestionnaire Hermes pour les nouvelles demandes.
+`booking:list` affiche les dossiers gérés par ce helper. Il ne recense pas les crons Linux ou les autres tâches Hermes. Utiliser le gestionnaire Hermes pour les nouvelles demandes.
 
 ### Comprendre les statuts
 
@@ -506,6 +546,6 @@ L’annulation d’une réservation confirmée dispose de tests en simulation. U
 
 ## Contribuer
 
-Ouvrir une [issue](https://github.com/RolandVrignon/par-ici-tennis/issues) ou une [pull request](https://github.com/RolandVrignon/par-ici-tennis/pulls) sur ce fork. Exécuter ESLint et les tests adaptés aux changements, sans inclure de configuration privée, journal du compte ou capture personnelle.
+Utiliser les onglets **Issues** ou **Pull requests** du dépôt qui héberge le fork. Exécuter ESLint et les tests adaptés aux changements, sans inclure de configuration privée, journal du compte ou capture personnelle.
 
 Projet initial : [bertrandda/par-ici-tennis](https://github.com/bertrandda/par-ici-tennis). Licence MIT — voir [LICENSE](LICENSE).

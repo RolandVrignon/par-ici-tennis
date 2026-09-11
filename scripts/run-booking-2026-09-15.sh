@@ -2,8 +2,15 @@
 
 set -u -o pipefail
 
-REPOSITORY_DIR="/home/rolexx/par-ici-tennis"
-NODE_BINARY="/home/rolexx/.local/share/fnm/aliases/default/bin/node"
+SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPOSITORY_DIR="$(cd -- "${SCRIPT_DIRECTORY}/.." && pwd)"
+NODE_BINARY="${TENNIS_NODE_BINARY:-}"
+if [[ -z "${NODE_BINARY}" && -x "${HOME}/.local/share/fnm/aliases/default/bin/node" ]]; then
+  NODE_BINARY="${HOME}/.local/share/fnm/aliases/default/bin/node"
+fi
+if [[ -z "${NODE_BINARY}" ]]; then
+  NODE_BINARY="$(command -v node 2>/dev/null || true)"
+fi
 EXPECTED_PARIS_DATE="2026-09-15"
 LOG_DIRECTORY="${REPOSITORY_DIR}/logs"
 LOG_FILE="${LOG_DIRECTORY}/booking-2026-09-21.log"
