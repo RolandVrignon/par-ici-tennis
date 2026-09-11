@@ -199,6 +199,10 @@ npm run start-dry-debug
 
 Combine the detailed logs with a visible browser by running `npm run start-dry-headed-debug`. Debug mode reports booking-step transitions, sanitized URLs, CAPTCHA network responses, challenge fingerprints, recognition results, validation messages, and dry-run cancellation status.
 
+Debug mode also saves the exact CAPTCHA images sent to Hugging Face under `img/captcha/`, with the run timestamp, browser mode, and attempt number. It reports their load state and dimensions so you can check whether headless mode captured a complete image. These local files are ignored by Git.
+
+After the widget reports `Vérifié avec succès`, the script waits for the next booking step instead of treating the success image as another CAPTCHA. Headless submission includes a short pause after filling the answer, matching the visible mode's input-to-submit interval. A `La réponse est incorrecte` message still means the widget rejected the answer; recognition is not guaranteed in either mode.
+
 Before running a real booking, check that the dry-run reaches the payment step, logs `Free price detected` for `Gratuité`, and cancels successfully. Verify that no reservation remains in your Paris Tennis account.
 
 You can start the script automatically using cron or equivalent

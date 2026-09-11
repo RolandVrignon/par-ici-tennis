@@ -61,6 +61,63 @@ test('rejected answers stop after two attempts in headless mode', async t => {
   assert.equal(await page.locator('.ready').isVisible(), false)
 })
 
+test('an accepted CAPTCHA is not recaptured while the booking page loads', async t => {
+  const page = await fixture(t)
+  await page.frameLocator('iframe').locator('#li-antibot-validate').evaluate(button => {
+    button.onclick = () => {
+      const note = globalThis.document.createElement('div')
+      note.id = 'li-antibot-check-note'
+      note.textContent = 'Vérifié avec succès'
+      globalThis.document.body.append(note)
+      globalThis.document.querySelector('img').style.width = '25px'
+      setTimeout(() => { globalThis.parent.document.querySelector('.ready').hidden = false }, 1200)
+    }
+  })
+  let calls = 0
+  await waitForStep(page, '.ready', { ai: { maxAttempts: 1 }, timeoutMs: 5000 }, async () => {
+    calls++
+    return 'AbC4'
+  })
+  assert.equal(calls, 1)
+  assert.equal(await page.locator('.ready').isVisible(), true)
+})
+
+test('headless validation waits for the widget to process the entered answer', async t => {
+  const page = await fixture(t)
+  await page.frameLocator('iframe').locator('#li-antibot-answer').evaluate(input => {
+    let processedAnswer = ''
+    input.oninput = () => { setTimeout(() => { processedAnswer = input.value }, 150) }
+    globalThis.document.querySelector('#li-antibot-validate').onclick = () => {
+      if (processedAnswer === 'AbC4') globalThis.parent.document.querySelector('#proceed').hidden = false
+    }
+  })
+  let calls = 0
+  await waitForStep(page, '.ready', { timeoutMs: 5000 }, async () => {
+    calls++
+    return 'AbC4'
+  })
+  assert.equal(calls, 1)
+  assert.equal(await page.locator('.ready').isVisible(), true)
+})
+
+test('a frame navigation during capture resumes at the next booking step', async t => {
+  const page = await fixture(t)
+  const frame = page.frames().find(frame => frame !== page.mainFrame())
+  const locator = frame.locator.bind(frame)
+  t.mock.method(frame, 'locator', (selector, ...args) => {
+    const result = locator(selector, ...args)
+    if (selector === '#li-antibot-questions-container img') {
+      result.screenshot = async () => {
+        await page.locator('.ready').evaluate(el => { el.hidden = false })
+        throw new Error('Protocol error (DOM.scrollIntoViewIfNeeded): Cannot find context with specified id')
+      }
+    }
+    return result
+  })
+  await waitForStep(page, '.ready', { timeoutMs: 5000 }, () => assert.fail('Unexpected inference'))
+  assert.equal(await page.locator('.ready').isVisible(), true)
+})
+
 test('provider failure allows manual completion in headed mode', async t => {
   const page = await fixture(t)
   let signalFailure
