@@ -1,0 +1,20 @@
+{
+  "locations": [
+    "Valeyre",
+    "Suzanne Lenglen"
+  ],
+  "date": "21/09/2026",
+  "hours": [
+    "18",
+    "19"
+  ],
+  "courtType": [
+    "Couvert"
+  ],
+  "players": [
+    {
+      "lastName": "PARTNER_LAST_NAME",
+      "firstName": "PARTNER_FIRST_NAME"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ Script to automatically book a tennis court in Paris (on https://tennis.paris.fr
   - [Payment process](#payment-process)
   - [Running](#running)
     - [On your machine](#on-your-machine)
+    - [Using Hermes and Telegram](#using-hermes-and-telegram)
     - [Using GitHub Actions (beta)](#using-github-actions-beta)
 - [Contributing](#contributing)
 - [License](#license)
@@ -30,11 +31,14 @@ Script to automatically book a tennis court in Paris (on https://tennis.paris.fr
 
 ### Configuration
 
-Create `config.json` file from `config.json.sample` and complete with your preferences.
+Configuration is split so stable secrets and account settings are never copied into temporary booking requests:
 
-Never commit `config.json`: it contains your account credentials and is excluded by `.gitignore`.
+- Copy `config.fixed.json.sample` to `config.fixed.json` for `account`, `priceType`, `ai`, and `ntfy`.
+- Copy `config.request.json.sample` to `config.request.json` for `date`, `locations`, `hours`, `courtType`, and `players`.
 
-- `location`: a list of courts ordered by preference - [full list](https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennisParisien&view=les_tennis_parisiens)
+Never commit either local file. Both are excluded by `.gitignore`; keep `config.fixed.json` readable only by your user (`chmod 600 config.fixed.json`). Existing installations can split a legacy `config.json` with `npm run config:migrate`.
+
+- `locations`: a list of courts ordered by preference - [full list](https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennisParisien&view=les_tennis_parisiens)
 
 You can use two formats for the `locations` field:
 
@@ -81,11 +85,11 @@ Choose the format that best matches your preferences.
 
 For a free account, set `"priceType": ["Gratuité"]`. This filters out paid courts. The setting does not grant free-booking eligibility: your Paris Tennis account must already have it.
 
-Keep only the price types you want to accept. `config.json.sample` lists all three supported values as examples; you do not need to keep them all. The order of `priceType` does not rank prices: every listed value is accepted.
+Keep only the price types you want to accept in `config.fixed.json`. The order of `priceType` does not rank prices: every listed value is accepted.
 
 #### Example: free account
 
-Save the following as your local `config.json`, replacing the example credentials, partner, courts, and hours with your own:
+Save the stable values in `config.fixed.json`:
 
 ```json
 {
@@ -93,9 +97,16 @@ Save the following as your local `config.json`, replacing the example credential
     "email": "your-email@example.com",
     "password": "YOUR_PARIS_TENNIS_PASSWORD"
   },
+  "priceType": ["Gratuité"]
+}
+```
+
+Save the booking preferences in `config.request.json`:
+
+```json
+{
   "locations": ["Valeyre", "Suzanne Lenglen"],
   "hours": ["18", "19"],
-  "priceType": ["Gratuité"],
   "courtType": ["Couvert"],
   "players": [
     {
@@ -137,7 +148,7 @@ To receive notifications:
 - Choose a unique topic name (e.g., `YOUR-UNIQUE-TOPIC-NAME` — choose something unique and hard to guess, as there is no password protection for subscriptions)
 - Subscribe to your topic using the [ntfy mobile app](https://ntfy.sh/docs/subscribe/phone/) or [web interface](https://ntfy.sh/)
 
-To enable ntfy notifications in script, add the following configuration to your `config.json`:
+To enable ntfy notifications, add the following stable configuration to `config.fixed.json`:
 
 ```json
 "ntfy": {
@@ -206,6 +217,25 @@ After the widget reports `Vérifié avec succès`, the script waits for the next
 Before running a real booking, check that the dry-run reaches the payment step, logs `Free price detected` for `Gratuité`, and cancels successfully. Verify that no reservation remains in your Paris Tennis account.
 
 You can start the script automatically using cron or equivalent
+
+#### <ins>Using Hermes and Telegram</ins>
+
+A local `tennis-booking` Hermes skill can turn a confirmed Telegram request into a one-shot job. The target court date and variable preferences are stored in a protected request record; account credentials, price settings, CAPTCHA configuration, and ntfy remain in `config.fixed.json`.
+
+Example request:
+
+```text
+Réserve Max Rousié le 21 septembre 2026 à 18h,
+en couvert, avec Paul Dupont.
+```
+
+Hermes asks for confirmation, calculates the Paris Tennis opening six days before the target date, prepares the process at 07:55 Europe/Paris, and begins searching at exactly 08:00. The job runs once in no-agent mode and delivers its result to the originating Telegram chat. The complete temporary configuration is created with mode `600` immediately before execution and deleted afterward.
+
+Prepared requests can be inspected locally with:
+
+```sh
+npm run booking:list
+```
 
 #### <ins>Using GitHub Actions (beta)</ins>
 

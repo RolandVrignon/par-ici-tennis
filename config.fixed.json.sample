@@ -1,0 +1,19 @@
+{
+  "account": {
+    "email": "user.name@host.com",
+    "password": "YOUR_PASSWORD"
+  },
+  "priceType": [
+    "Gratuité"
+  ],
+  "ai": {
+    "enable": true,
+    "space": "Nischay103/captcha_recognition",
+    "maxAttempts": 2,
+    "timeoutMs": 30000
+  },
+  "ntfy": {
+    "enable": false,
+    "topic": "YOUR-OWN-TOPIC"
+  }
+}
