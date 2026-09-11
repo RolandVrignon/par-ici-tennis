@@ -118,6 +118,45 @@ test('a frame navigation during capture resumes at the next booking step', async
   assert.equal(await page.locator('.ready').isVisible(), true)
 })
 
+for (const selector of ['#li-antibot-answer', '#li-antibot-questions-container img']) {
+  test(`a detached frame during ${selector} visibility is retried`, async t => {
+    const page = await fixture(t)
+    const frame = page.frames().find(frame => frame !== page.mainFrame())
+    const locator = frame.locator.bind(frame)
+    let detached = false
+    t.mock.method(frame, 'locator', (value, ...args) => {
+      const result = locator(value, ...args)
+      if (value === selector) {
+        const isVisible = result.isVisible.bind(result)
+        result.isVisible = async () => {
+          if (!detached) {
+            detached = true
+            await page.locator('.ready').evaluate(el => { el.hidden = false })
+            throw new Error('locator.isVisible: Frame was detached')
+          }
+          return isVisible()
+        }
+      }
+      return result
+    })
+    await waitForStep(page, '.ready', { timeoutMs: 5000 }, () => assert.fail('Unexpected inference'))
+    assert.equal(detached, true)
+    assert.equal(await page.locator('.ready').isVisible(), true)
+  })
+}
+
+test('unexpected visibility errors are not swallowed as frame navigation', async t => {
+  const page = await fixture(t)
+  const frame = page.frames().find(frame => frame !== page.mainFrame())
+  const locator = frame.locator.bind(frame)
+  t.mock.method(frame, 'locator', (selector, ...args) => {
+    const result = locator(selector, ...args)
+    if (selector === '#li-antibot-answer') result.isVisible = async () => { throw new Error('Unexpected browser error') }
+    return result
+  })
+  await assert.rejects(waitForStep(page, '.ready', { timeoutMs: 5000 }), /Unexpected browser error/)
+})
+
 test('provider failure allows manual completion in headed mode', async t => {
   const page = await fixture(t)
   let signalFailure
