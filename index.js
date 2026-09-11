@@ -1,7 +1,7 @@
 import { chromium } from 'playwright'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat.js'
-import { writeFileSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
 import { createEvent } from 'ics'
 import { config } from './staticFiles.js'
 import { notify } from './lib/ntfy.js'
@@ -12,7 +12,11 @@ dayjs.extend(customParseFormat)
 const bookTennis = async () => {
   const DRY_RUN_MODE = process.argv.includes('--dry-run')
   const HEADED_MODE = process.argv.includes('--headed')
-  const captchaOptions = { headed: HEADED_MODE, ai: config.ai }
+  const DEBUG_MODE = process.argv.includes('--debug')
+  const captchaOptions = { headed: HEADED_MODE, debug: DEBUG_MODE, ai: config.ai }
+  const debugLog = (message) => {
+    if (DEBUG_MODE) console.log(`${dayjs().format()} - [debug][booking] ${message}`)
+  }
   if (DRY_RUN_MODE) {
     console.log('----- DRY RUN START -----')
     console.log('Script lancé en mode DRY RUN. Afin de tester votre configuration, une recherche va être lancé mais AUCUNE réservation ne sera réalisée')
@@ -26,7 +30,16 @@ const bookTennis = async () => {
   })
 
   console.log(`${dayjs().format()} - Browser started`)
+  debugLog(`mode=${DRY_RUN_MODE ? 'dry-run' : 'real'} browser=${HEADED_MODE ? 'headed' : 'headless'} captchaAI=${config.ai?.enable === false ? 'disabled' : 'enabled'}`)
   const page = await browser.newPage()
+  if (DEBUG_MODE) {
+    page.on('pageerror', error => debugLog(`page-error=${JSON.stringify(error.message)}`))
+    page.on('console', message => {
+      if (message.type() === 'error' || message.type() === 'warning') {
+        debugLog(`browser-console type=${message.type()} text=${JSON.stringify(message.text())}`)
+      }
+    })
+  }
   let canAbortBooking = false
   page.setDefaultTimeout(90000)
   try {
@@ -48,6 +61,7 @@ const bookTennis = async () => {
       const logLocation = process.env.GITHUB_ACTIONS ? `location ${i + 1}` : location
       console.log(`${dayjs().format()} - Search at ${logLocation}`)
       await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&view=recherche_creneau#!')
+      debugLog(`search-page-loaded location=${JSON.stringify(logLocation)} title=${JSON.stringify(await page.title())}`)
 
       // select tennis location
       await waitForStep(page, '.tokens-input-text', captchaOptions)
@@ -79,7 +93,8 @@ const bookTennis = async () => {
           const courtNumbers = !Array.isArray(config.locations) ? config.locations[location] : []
           const slots = await page.locator(dateDeb).all()
           for (const slot of slots) {
-            const bookSlotButton = `[courtid="${await slot.getAttribute('courtid')}"]${dateDeb}`
+            const courtId = await slot.getAttribute('courtid')
+            const bookSlotButton = `[courtid="${courtId}"]${dateDeb}`
             if (courtNumbers.length > 0) {
               const courtName = (await page.locator(`.court:left-of(${bookSlotButton})`).innerText()).trim()
               if (!courtNumbers.includes(parseInt(courtName.match(/Court N°(\d+)/)[1]))) {
@@ -92,8 +107,10 @@ const bookTennis = async () => {
               continue
             }
             selectedHour = hour
+            debugLog(`slot-selected location=${JSON.stringify(logLocation)} date=${date.format('YYYY-MM-DD')} hour=${hour} courtId=${JSON.stringify(courtId)} priceType=${JSON.stringify(priceType)} courtType=${JSON.stringify(courtType)}`)
             await page.click(bookSlotButton)
             canAbortBooking = true
+            debugLog(`slot-clicked title=${JSON.stringify(await page.title())}`)
 
             break hoursLoop
           }
@@ -114,15 +131,18 @@ const bookTennis = async () => {
         await page.waitForSelector(`[name="player${i + 1}"]`)
         await page.fill(`[name="player${i + 1}"] >> nth=0`, player.lastName)
         await page.fill(`[name="player${i + 1}"] >> nth=1`, player.firstName)
+        debugLog(`player-filled index=${i + 1}`)
       }
 
       await page.keyboard.press('Enter')
+      debugLog('player-step-submitted')
 
       await waitForStep(page, '.order-steps-infos h2 >> text="2 / 3 - Mode de paiement"', captchaOptions)
       await page.waitForSelector('.priceTable')
 
       const paymentSummary = await page.locator('.priceTable').innerText()
       const isFreeBooking = paymentSummary.includes('Gratuité')
+      debugLog(`payment-step-ready free=${isFreeBooking} summary=${JSON.stringify(paymentSummary.replace(/\s+/g, ' ').trim())}`)
 
       if (!isFreeBooking) {
         const paymentMode = page.locator('#order_select_payment_form #paymentMode')
@@ -132,6 +152,7 @@ const bookTennis = async () => {
           el.style.display = 'block'
         })
         await paymentMode.fill('existingTicket')
+        debugLog('paid-payment-mode-selected value=existingTicket')
       } else {
         console.log(`${dayjs().format()} - Free price detected`)
       }
@@ -149,22 +170,29 @@ const bookTennis = async () => {
         ])
         if (!cancelResponse.ok()) throw new Error('Dry-run cancellation failed')
         canAbortBooking = false
+        debugLog(`dry-run-cancelled status=${cancelResponse.status()}`)
 
         break locationsLoop
       }
 
       if (isFreeBooking) {
-        await page.locator('.priceTable .price-item[paymentMode="free"]').click()
+        const freePrice = page.locator('.priceTable .price-item[paymentMode="free"]')
+        debugLog(`free-price-options=${await freePrice.count()}`)
+        await freePrice.click()
         canAbortBooking = false
-        await page.locator('.step-two #submit:not(.disabled)').click()
+        const freeSubmit = page.locator('.step-two #submit:not(.disabled)')
+        debugLog(`free-submit-options=${await freeSubmit.count()}`)
+        await freeSubmit.click()
       } else {
         const submit = page.locator('#order_select_payment_form #envoyer')
         await submit.evaluate(el => el.classList.remove('hide'))
         canAbortBooking = false
         await submit.click()
       }
+      debugLog('payment-step-submitted')
 
       await page.waitForSelector('.confirmReservation')
+      debugLog('reservation-confirmation-visible')
 
       // Extract reservation details
       const address = (await page.locator('.address').textContent()).trim().replace(/( ){2,}/g, ' ')
@@ -218,7 +246,9 @@ const bookTennis = async () => {
     console.log(e)
     process.exitCode = 1
     if (!page.isClosed()) {
+      mkdirSync('img', { recursive: true })
       const screenshot = await page.screenshot({ path: 'img/failure.png' })
+      debugLog(`failure-screenshot=img/failure.png title=${JSON.stringify(await page.title())}`)
 
       // Release only this run's temporary hold, never a submitted reservation.
       if (canAbortBooking) {

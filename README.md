@@ -191,6 +191,14 @@ npm run start-dry-headed
 
 In visible browser mode, you can solve the CAPTCHA manually if automatic recognition fails. The script waits up to five minutes for each login, search, or booking step.
 
+For detailed troubleshooting logs without displaying account credentials or player names, run:
+
+```sh
+npm run start-dry-debug
+```
+
+Combine the detailed logs with a visible browser by running `npm run start-dry-headed-debug`. Debug mode reports booking-step transitions, sanitized URLs, CAPTCHA network responses, challenge fingerprints, recognition results, validation messages, and dry-run cancellation status.
+
 Before running a real booking, check that the dry-run reaches the payment step, logs `Free price detected` for `Gratuité`, and cancels successfully. Verify that no reservation remains in your Paris Tennis account.
 
 You can start the script automatically using cron or equivalent
