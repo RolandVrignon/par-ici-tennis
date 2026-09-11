@@ -50,3 +50,17 @@ test('temporary booking config preserves account, price and notifications', () =
   assert.equal(config.ntfy.topic, 'fixed-topic')
   assert.deepEqual(config.locations, validRequest().locations)
 })
+
+test('opening times recalculate the Paris offset across both DST transitions', () => {
+  assert.deepEqual(getBookingSchedule({ date: '27/10/2026' }), {
+    scheduleAt: '2026-10-21T07:55:00+02:00', bookingOpensAt: '2026-10-21T08:00:00+02:00',
+  })
+  assert.deepEqual(getBookingSchedule({ date: '30/03/2027' }), {
+    scheduleAt: '2027-03-24T07:55:00+01:00', bookingOpensAt: '2027-03-24T08:00:00+01:00',
+  })
+  assert.throws(() => normalizeBookingRequest({ ...validRequest(), date: '27/10/2026' }, { now: dayjs('2026-10-21T08:30:00+02:00') }), /already passed/)
+})
+
+test('a string dryRun flag cannot silently create a real booking', () => {
+  assert.throws(() => normalizeBookingRequest({ ...validRequest(), dryRun: 'true' }), /boolean/)
+})

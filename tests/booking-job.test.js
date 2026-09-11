@@ -5,9 +5,9 @@ import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 import dayjs from 'dayjs'
-import { attachCronJob, listBookingJobs, prepareBookingJob, removeBookingJob } from '../lib/booking-job.js'
+import { attachCronJob, listBookingJobs, prepareBookingJob, removeBookingJob, cancelBookingJob, claimBookingJob, editBookingJob } from '../lib/booking-job.js'
 
-test('prepared Hermes jobs contain no fixed credentials and can be managed', t => {
+test('prepared Hermes jobs contain no fixed credentials and can be managed', async t => {
   const root = mkdtempSync(join(tmpdir(), 'par-ici-tennis-job-test-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const stateDirectory = join(root, 'state')
@@ -19,6 +19,7 @@ test('prepared Hermes jobs contain no fixed credentials and can be managed', t =
     ntfy: { enable: true, topic: 'fixed-topic' },
   }))
   const options = {
+    catalog: [{ id: '293', name: 'Max Rousié', arrondissement: 17 }, { id: '294', name: 'Jesse Owens', arrondissement: 18 }],
     stateDirectory,
     hermesScriptsDirectory,
     repositoryDirectory: root,
@@ -26,7 +27,7 @@ test('prepared Hermes jobs contain no fixed credentials and can be managed', t =
     fixedConfigPath,
     now: dayjs('2026-09-11T12:00:00+02:00'),
   }
-  const prepared = prepareBookingJob({
+  const prepared = await prepareBookingJob({
     date: '21/09/2026',
     locations: ['Max Rousié'],
     hours: ['18'],
@@ -51,7 +52,7 @@ test('prepared Hermes jobs contain no fixed credentials and can be managed', t =
   assert.equal(attached.cronJobId, 'hermes-job-123')
   assert.equal(listBookingJobs(options).length, 1)
 
-  assert.throws(() => prepareBookingJob({
+  await assert.rejects(() => prepareBookingJob({
     date: '21/09/2026',
     locations: ['Jesse Owens'],
     hours: ['19'],
@@ -59,6 +60,13 @@ test('prepared Hermes jobs contain no fixed credentials and can be managed', t =
     players: [{ lastName: 'MARTIN', firstName: 'Alice' }],
   }, options), /Another active booking request/)
 
-  assert.equal(removeBookingJob(prepared.requestId, options).id, prepared.requestId)
-  assert.equal(listBookingJobs(options).length, 0)
+  const edited = await editBookingJob(prepared.requestId, {
+    ...JSON.parse(requestContent).request, hours: ['20'], locations: ['max rousie'],
+  }, options)
+  assert.deepEqual(edited.request.hours, ['20'])
+  assert.deepEqual(edited.request.locations, ['Max Rousié'])
+  assert.throws(() => removeBookingJob(prepared.requestId, options), /Only unscheduled/)
+  assert.equal(cancelBookingJob(prepared.requestId, options).status, 'cancelled')
+  assert.throws(() => claimBookingJob(prepared.requestId, options), /cannot run/)
+  assert.equal(listBookingJobs(options).length, 1)
 })

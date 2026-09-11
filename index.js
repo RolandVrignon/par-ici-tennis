@@ -6,6 +6,10 @@ import { createEvent } from 'ics'
 import { config } from './staticFiles.js'
 import { notify } from './lib/ntfy.js'
 import { waitForStep } from './lib/captcha.js'
+import { parseClubCatalog, resolveClub } from './lib/clubs.js'
+import { reportBookingResult } from './lib/booking-result.js'
+import { bookingJobOptions } from './lib/booking-job.js'
+import { acquireOperationLock } from './lib/operation-lock.js'
 
 dayjs.extend(customParseFormat)
 
@@ -57,7 +61,8 @@ const bookTennis = async () => {
 
     const locations = !Array.isArray(config.locations) ? Object.keys(config.locations) : config.locations
     locationsLoop:
-    for (const [i, location] of locations.entries()) {
+    for (const [i, requestedLocation] of locations.entries()) {
+      let location = requestedLocation
       const logLocation = process.env.GITHUB_ACTIONS ? `location ${i + 1}` : location
       console.log(`${dayjs().format()} - Search at ${logLocation}`)
       await page.goto('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&view=recherche_creneau#!')
@@ -65,9 +70,10 @@ const bookTennis = async () => {
 
       // select tennis location
       await waitForStep(page, '.tokens-input-text', captchaOptions)
+      location = resolveClub(parseClubCatalog(await page.content()), requestedLocation).name
       await page.locator('.tokens-input-text').pressSequentially(`${location} `)
-      await page.waitForSelector(`.tokens-suggestions-list-element >> text="${location}"`)
-      await page.click(`.tokens-suggestions-list-element >> text="${location}"`)
+      const suggestion = page.locator('.tokens-suggestions-list-element').getByText(location, { exact: true })
+      await suggestion.click()
 
       // select date
       await page.click('#when')
@@ -90,7 +96,7 @@ const bookTennis = async () => {
             await page.click(`#head${location.replaceAll(' ', '')}${hour}h .panel-title`)
           }
 
-          const courtNumbers = !Array.isArray(config.locations) ? config.locations[location] : []
+          const courtNumbers = !Array.isArray(config.locations) ? config.locations[requestedLocation] : []
           const slots = await page.locator(dateDeb).all()
           for (const slot of slots) {
             const courtId = await slot.getAttribute('courtid')
@@ -171,10 +177,12 @@ const bookTennis = async () => {
         if (!cancelResponse.ok()) throw new Error('Dry-run cancellation failed')
         canAbortBooking = false
         debugLog(`dry-run-cancelled status=${cancelResponse.status()}`)
+        reportBookingResult('dry-run-cancelled')
 
         break locationsLoop
       }
 
+      reportBookingResult('submitted')
       if (isFreeBooking) {
         const freePrice = page.locator('.priceTable .price-item[paymentMode="free"]')
         debugLog(`free-price-options=${await freePrice.count()}`)
@@ -193,6 +201,7 @@ const bookTennis = async () => {
 
       await page.waitForSelector('.confirmReservation')
       debugLog('reservation-confirmation-visible')
+      reportBookingResult('confirmed')
 
       // Extract reservation details
       const address = (await page.locator('.address').textContent()).trim().replace(/( ){2,}/g, ' ')
@@ -224,6 +233,7 @@ const bookTennis = async () => {
       const createdEvent = createEvent(event)
       if (createdEvent.error) {
         console.log('ICS creation error:', createdEvent.error)
+        process.exitCode = 1
 
         break
       }
@@ -272,4 +282,5 @@ const bookTennis = async () => {
   }
 }
 
-bookTennis()
+const release = process.send ? () => {} : acquireOperationLock(bookingJobOptions().stateDirectory)
+try { await bookTennis() } finally { release() }

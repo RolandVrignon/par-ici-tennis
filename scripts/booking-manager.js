@@ -4,11 +4,15 @@ import { readFileSync, rmSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
 import {
   attachCronJob,
+  cancelBookingJob,
+  editBookingJob,
   listBookingJobs,
   prepareBookingJob,
   readBookingJob,
   removeBookingJob,
 } from '../lib/booking-job.js'
+
+console.log = (...values) => console.error(...values)
 
 const [command, ...args] = process.argv.slice(2)
 const getArgument = (name) => {
@@ -27,7 +31,7 @@ try {
       throw new Error('--consume is restricted to /tmp/tennis-booking-request-*.json')
     }
     try {
-      print(prepareBookingJob(JSON.parse(readFileSync(inputPath, 'utf8'))))
+      print(await prepareBookingJob(JSON.parse(readFileSync(inputPath, 'utf8'))))
     } finally {
       if (consume) rmSync(inputPath, { force: true })
     }
@@ -37,10 +41,14 @@ try {
     print(listBookingJobs())
   } else if (command === 'show') {
     print(readBookingJob(getArgument('--request-id')))
+  } else if (command === 'cancel') {
+    print(cancelBookingJob(getArgument('--request-id')))
+  } else if (command === 'edit') {
+    print(await editBookingJob(getArgument('--request-id'), JSON.parse(readFileSync(resolve(getArgument('--input')), 'utf8'))))
   } else if (command === 'cleanup') {
     print({ removed: removeBookingJob(getArgument('--request-id'))?.id || null })
   } else {
-    throw new Error('Usage: booking-manager.js prepare|attach|list|show|cleanup')
+    throw new Error('Usage: booking-manager.js prepare|attach|list|show|edit|cancel|cleanup')
   }
 } catch (error) {
   process.stderr.write(`${error.message}\n`)

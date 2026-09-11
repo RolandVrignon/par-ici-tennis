@@ -218,24 +218,65 @@ Before running a real booking, check that the dry-run reaches the payment step, 
 
 You can start the script automatically using cron or equivalent
 
-#### <ins>Using Hermes and Telegram</ins>
+#### <ins>Manage clubs, reservations and scheduled requests</ins>
 
-A local `tennis-booking` Hermes skill can turn a confirmed Telegram request into a one-shot job. The target court date and variable preferences are stored in a protected request record; account credentials, price settings, CAPTCHA configuration, and ntfy remain in `config.fixed.json`.
+The CLI is shared by local use and Hermes on the VPS. Commands return JSON on stdout; diagnostics go to stderr. Prefix with `node scripts/tennis.js` when a machine consumer needs JSON without npm's banner.
 
-Example request:
-
-```text
-Réserve Max Rousié le 21 septembre 2026 à 18h,
-en couvert, avec Paul Dupont.
+```sh
+npm run clubs:list
+npm run clubs:list -- --arrondissement 18
+npm run clubs:find -- --query "max rousie"
+npm run reservations:list
 ```
 
-Hermes asks for confirmation, calculates the Paris Tennis opening six days before the target date, prepares the process at 07:55 Europe/Paris, and begins searching at exactly 08:00. The job runs once in no-agent mode and delivers its result to the originating Telegram chat. The complete temporary configuration is created with mode `600` immediately before execution and deleted afterward.
+The club catalogue is fetched from Paris Tennis on every command. It includes official IDs, exact search labels, arrondissement, address and courts. Accents/case are ignored when matching (`max rousie` becomes `Max Rousié`). A unique partial match is allowed; ambiguous matches and spelling suggestions require choosing an exact name. Preparation validates clubs and stores their IDs/labels; execution rechecks the current search catalogue. Order and court-number preferences are preserved. Max Rousié belongs to the **17th arrondissement** in the official catalogue.
 
-Prepared requests can be inspected locally with:
+`reservations:list` reads the account's **Ma réservation** page, including `details` and whether cancellation is available. It only needs `config.fixed.json` (legacy `config.json` still works). The current site exposes a single current-reservation page; unfamiliar layouts fail explicitly rather than reporting an empty account. Returned `reservation-...` IDs are fingerprints of the displayed details, not official confirmation numbers.
+
+Cancel a specific account reservation using the ID from the live list:
+
+```sh
+# Preview: does not submit anything
+npm run reservations:cancel -- --id reservation-<fingerprint>
+# Cancel the identified reservation and verify the account afterward
+npm run reservations:cancel -- --id reservation-<fingerprint> --confirm
+```
+
+A changed/missing reservation or disabled cancellation stops the command. The CLI uses the site's confirmation form and verifies the empty-account result. On an uncertain result, inspect the account before retrying. Add `--headed` to account commands for manual CAPTCHA entry if needed. The cancellation flow has local simulated-form coverage; an empty live account does not validate cancelling a real booking.
+
+Future booking **requests** are separate from confirmed account reservations:
 
 ```sh
 npm run booking:list
+npm run booking:manage -- show --request-id <id>
+npm run booking:manage -- edit --request-id <id> --input /path/to/request.json
+npm run booking:manage -- cancel --request-id <id>
 ```
+
+Editing requires a complete variable request and keeps the same date/cron attachment. Changing the date requires cancelling and scheduling a new request. Cancelling a pending request disables execution and keeps its audit record; remove its attached Hermes cron too. It never cancels a reservation on Paris Tennis. `cleanup` is only for unscheduled prepared requests.
+
+The runner refuses replays of completed/cancelled requests and serializes booking/cancellation operations. It recalculates Europe/Paris offsets across DST. A confirmed booking followed by an ICS error is `succeeded_with_warnings`, never a failed reservation. `dry_run_succeeded` requires verified cancellation; `needs_reconciliation` means the account must be checked before another attempt. A stale `.operation-lock` requires checking the process/account before removal.
+
+State defaults to `~/.local/state/par-ici-tennis/bookings`; override with `TENNIS_BOOKING_STATE_DIR`. `TENNIS_FIXED_CONFIG_PATH`, `HERMES_HOME`, `HERMES_SCRIPTS_DIR`, and `TENNIS_NODE_BINARY` are supported. Linux Hermes wrappers use `flock`; the CLI itself also runs on macOS. Keep one shared state directory per account.
+
+#### <ins>Using Hermes and Telegram</ins>
+
+Install or update the versioned skill on the VPS:
+
+```sh
+cd /home/rolexx/par-ici-tennis
+npm run hermes:install
+```
+
+The installer backs up the previous `SKILL.md` before replacing it. The source is [skills/tennis-booking/SKILL.md](skills/tennis-booking/SKILL.md). It supports requests such as:
+
+- “Quels clubs dans le 18e ?”
+- “Est-ce que Max Rousié existe ?”
+- “Liste mes réservations confirmées.”
+- “Annule ma réservation de mardi à 18 h.”
+- “Décale l'heure de ma demande programmée à 19 h.”
+
+For a new booking, Hermes resolves the official club, collects date/hours/court types/partners, and uses the user's confirmed intent before scheduling. The helper prepares at 07:55 Europe/Paris, then launches the booking at 08:00, six calendar days before the court date. Browser launch and login happen after that launch time; a booking at precisely 08:00 is not guaranteed. One-shot Hermes jobs run with `no_agent=true` and deliver their result to the originating Telegram chat. The temporary full configuration is created with mode 600 immediately before execution and deleted afterward. No Telegram message or cron is created by installing the skill.
 
 #### <ins>Using GitHub Actions (beta)</ins>
 

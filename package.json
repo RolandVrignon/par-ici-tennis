@@ -30,7 +30,13 @@
     "booking:list": "node scripts/booking-manager.js list",
     "wait": "node scripts/wait-8-am.js",
     "eslint": "eslint .",
-    "test": "node --test"
+    "test": "node --test",
+    "clubs:list": "node scripts/tennis.js clubs list",
+    "clubs:find": "node scripts/tennis.js clubs find",
+    "reservations:list": "node scripts/tennis.js reservations list",
+    "reservations:cancel": "node scripts/tennis.js reservations cancel",
+    "booking:manage": "node scripts/booking-manager.js",
+    "hermes:install": "node scripts/install-hermes-skill.js"
   },
   "dependencies": {
     "@gradio/client": "^2.6.0",

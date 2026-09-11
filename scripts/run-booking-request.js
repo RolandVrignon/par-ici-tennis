@@ -1,123 +1,108 @@
 #!/usr/bin/env node
-
-import { createWriteStream, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import { setTimeout as wait } from 'node:timers/promises'
 import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc.js'
-import timezone from 'dayjs/plugin/timezone.js'
-import { buildBookingConfig, normalizeBookingRequest, PARIS_TIMEZONE } from '../lib/booking-request.js'
-import { updateBookingJob } from '../lib/booking-job.js'
+import { buildBookingConfig, normalizeBookingRequest, getBookingSchedule } from '../lib/booking-request.js'
+import { bookingJobOptions, claimBookingJob, updateBookingJob } from '../lib/booking-job.js'
+import { acquireOperationLock } from '../lib/operation-lock.js'
+import { classifyBookingResult } from '../lib/booking-result.js'
 
-dayjs.extend(utc)
-dayjs.extend(timezone)
-
-const repositoryDirectory = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const args = process.argv.slice(2)
-const requestIndex = args.indexOf('--request')
-if (requestIndex === -1 || !args[requestIndex + 1]) throw new Error('Missing --request')
-
-const requestFile = resolve(args[requestIndex + 1])
 const checkOnly = args.includes('--check')
-const record = JSON.parse(readFileSync(requestFile, 'utf8'))
-const request = normalizeBookingRequest(record.request, { allowPastOpening: true })
-const fixedConfigPath = resolve(process.env.TENNIS_FIXED_CONFIG_PATH || join(repositoryDirectory, 'config.fixed.json'))
-const fixedConfig = JSON.parse(readFileSync(fixedConfigPath, 'utf8'))
-const fullConfig = buildBookingConfig(fixedConfig, request)
-const temporaryDirectory = mkdtempSync(join(tmpdir(), 'par-ici-tennis-'))
-const temporaryConfigPath = join(temporaryDirectory, 'config.json')
-const logDirectory = join(repositoryDirectory, 'logs', 'hermes')
-const logFile = join(logDirectory, `${record.id}.log`)
-const hermesScriptsDirectory = resolve(process.env.HERMES_HOME || '/home/rolexx/.hermes', 'scripts')
-const wrapperFile = join(hermesScriptsDirectory, `tennis-booking-${record.id}.sh`)
-
-mkdirSync(logDirectory, { recursive: true, mode: 0o700 })
-writeFileSync(temporaryConfigPath, `${JSON.stringify(fullConfig, null, 2)}\n`, { mode: 0o600 })
-
-const run = async () => {
-  if (checkOnly) {
-    const loadedConfig = JSON.parse(readFileSync(temporaryConfigPath, 'utf8'))
-    if (!loadedConfig.account?.email || !loadedConfig.account?.password) throw new Error('Temporary configuration has no credentials')
-    if (loadedConfig.date !== request.date) throw new Error('Temporary configuration has the wrong target date')
-    process.stdout.write('Booking request check passed. No browser was started.\n')
-    return
-  }
-
-  const opening = dayjs(record.bookingOpensAt).tz(PARIS_TIMEZONE)
-  const waitMilliseconds = Math.max(0, opening.diff(dayjs().tz(PARIS_TIMEZONE)))
-  if (waitMilliseconds > 10 * 60 * 1000) throw new Error('Booking runner started more than ten minutes before opening')
-
-  updateBookingJob(record.id, { status: 'running', startedAt: new Date().toISOString(), logFile })
-  if (waitMilliseconds > 0) await wait(waitMilliseconds)
-
-  const childArguments = ['index.js', '--debug']
-  if (request.dryRun) childArguments.push('--dry-run')
-  const output = []
-  let outputSize = 0
-  const logStream = createWriteStream(logFile, { flags: 'a', mode: 0o600 })
-  const child = spawn(process.execPath, childArguments, {
-    cwd: repositoryDirectory,
-    env: { ...process.env, TENNIS_CONFIG_PATH: temporaryConfigPath },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-
-  const capture = chunk => {
-    logStream.write(chunk)
-    if (outputSize < 2_000_000) {
-      const value = chunk.toString()
-      output.push(value)
-      outputSize += value.length
-    }
-  }
-  child.stdout.on('data', capture)
-  child.stderr.on('data', capture)
-
-  const exitCode = await new Promise((resolveCode, reject) => {
-    child.once('error', reject)
-    child.once('close', code => resolveCode(code ?? 1))
-  })
-  await new Promise(resolveStream => logStream.end(resolveStream))
-
-  const combinedOutput = output.join('')
-  const foundReservation = request.dryRun
-    ? combinedOutput.includes('Fausse réservation faite')
-    : combinedOutput.includes('Réservation faite :') || combinedOutput.includes('Réservation faite, regardez')
-  const status = exitCode !== 0 ? 'failed' : foundReservation ? 'succeeded' : 'unavailable'
-  updateBookingJob(record.id, {
-    status,
-    completedAt: new Date().toISOString(),
-    exitCode,
-    logFile,
-  })
-
-  const label = `${request.date} à ${request.hours.join('/')}h — ${Array.isArray(request.locations) ? request.locations.join(', ') : Object.keys(request.locations).join(', ')}`
-  if (exitCode !== 0) {
-    process.stderr.write(`Échec de la réservation Paris Tennis (${label}). Journal : ${logFile}\n`)
-    process.exitCode = exitCode
-  } else if (foundReservation && request.dryRun) {
-    process.stdout.write(`✅ Test Paris Tennis réussi pour le ${label}. Aucune réservation réelle effectuée.\n`)
-  } else if (foundReservation) {
-    process.stdout.write(`✅ Réservation Paris Tennis effectuée pour le ${label}.\n`)
-  } else {
-    process.stdout.write(`⚠️ Aucun terrain correspondant trouvé pour le ${label}. Journal : ${logFile}\n`)
-  }
-}
+let release = () => {}
+let temporaryDirectory
+let child
+let record
+let options
+let claimed = false
+let outcome
+let logFile
+const controller = new AbortController()
+const interrupt = () => { controller.abort(); child?.kill('SIGTERM') }
+process.once('SIGTERM', interrupt)
+process.once('SIGINT', interrupt)
 
 try {
-  await run()
+  const index = args.indexOf('--request')
+  if (index === -1 || !args[index + 1]) throw new Error('Missing --request')
+  const requestFile = resolve(args[index + 1])
+  record = JSON.parse(readFileSync(requestFile, 'utf8'))
+  if (!/^[a-z0-9-]+$/.test(record.id) || requestFile !== join(dirname(requestFile), `${record.id}.json`)) throw new Error('Invalid request file or id')
+  options = bookingJobOptions({ stateDirectory: dirname(requestFile) })
+  if (!checkOnly) release = acquireOperationLock(options.stateDirectory)
+  record = JSON.parse(readFileSync(requestFile, 'utf8'))
+  const request = normalizeBookingRequest(record.request, { allowPastOpening: true })
+  const fixed = JSON.parse(readFileSync(options.fixedConfigPath, 'utf8'))
+  const fullConfig = buildBookingConfig(fixed, request)
+  // Check configuration without creating a secret file or changing job status.
+  if (checkOnly) {
+    process.stdout.write('Booking request check passed. No browser was started.\n')
+  } else {
+    const expected = getBookingSchedule(request)
+    if (record.bookingOpensAt !== expected.bookingOpensAt) throw new Error('Stored opening time differs from the Paris schedule; re-prepare this request')
+    const waitMilliseconds = Math.max(0, dayjs(record.bookingOpensAt).diff(dayjs()))
+    if (waitMilliseconds > 600000) throw new Error('Booking runner started more than ten minutes before opening')
+    if (dayjs().diff(dayjs(record.bookingOpensAt)) > 3600000) throw new Error('Booking window expired; prepare a new request instead of replaying it')
+    claimBookingJob(record.id, options)
+    claimed = true
+    if (waitMilliseconds) await wait(waitMilliseconds, undefined, { signal: controller.signal })
+    if (controller.signal.aborted) throw new Error('Booking interrupted before launch')
+    temporaryDirectory = mkdtempSync(join(tmpdir(), 'par-ici-tennis-'))
+    const configPath = join(temporaryDirectory, 'config.json')
+    writeFileSync(configPath, `${JSON.stringify(fullConfig)}\n`, { mode: 0o600 })
+    const logDirectory = join(root, 'logs', 'hermes')
+    mkdirSync(logDirectory, { recursive: true, mode: 0o700 })
+    logFile = join(logDirectory, `${record.id}.log`)
+    const childArgs = ['index.js', '--debug', ...(request.dryRun ? ['--dry-run'] : [])]
+    child = spawn(process.execPath, childArgs, {
+      cwd: root,
+      env: { ...process.env, TENNIS_CONFIG_PATH: configPath },
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    })
+    child.on('message', message => {
+      if (message?.type !== 'tennis-result' || !['submitted', 'confirmed', 'dry-run-cancelled'].includes(message.status)) return
+      if (outcome === 'confirmed' || outcome === 'dry-run-cancelled') return
+      outcome = message.status
+      // Persist confirmation before ancillary work (ICS, notifications) can fail.
+      updateBookingJob(record.id, { outcome, logFile }, options)
+    })
+    const capture = chunk => appendFileSync(logFile, chunk, { mode: 0o600 })
+    child.stdout.on('data', capture)
+    child.stderr.on('data', capture)
+    const exitCode = await new Promise((resolveCode, reject) => {
+      child.once('error', reject)
+      child.once('close', code => resolveCode(code ?? 1))
+    })
+    const status = classifyBookingResult({ exitCode, outcome, dryRun: request.dryRun })
+    updateBookingJob(record.id, { status, outcome, exitCode, logFile, completedAt: new Date().toISOString() }, options)
+    const label = `${request.date} à ${request.hours.join('/')}h — ${Array.isArray(request.locations) ? request.locations.join(', ') : Object.keys(request.locations).join(', ')}`
+    const messages = {
+      succeeded: `✅ Réservation Paris Tennis confirmée : ${label}.`,
+      succeeded_with_warnings: `⚠️ Réservation Paris Tennis confirmée : ${label}. Une étape après réservation a échoué ; ne pas relancer. Journal : ${logFile}`,
+      dry_run_succeeded: `✅ Test Paris Tennis terminé et annulation vérifiée : ${label}. Aucune réservation réelle.`,
+      unavailable: `⚠️ Aucun terrain correspondant trouvé : ${label}.`,
+      needs_reconciliation: `⚠️ Résultat de réservation incertain : ${label}. Vérifier le compte avant toute nouvelle tentative. Journal : ${logFile}`,
+      failed: `Échec de la réservation Paris Tennis : ${label}. Journal : ${logFile}`,
+    }
+    process.stdout.write(`${messages[status]}\n`)
+    if (['failed', 'needs_reconciliation'].includes(status)) process.exitCode = 1
+  }
 } catch (error) {
-  updateBookingJob(record.id, {
-    status: 'failed',
-    completedAt: new Date().toISOString(),
-    error: error.message,
-    logFile,
-  })
-  process.stderr.write(`Échec du lanceur Paris Tennis : ${error.message}\n`)
-  process.exitCode = 1
+  if (claimed) {
+    const status = outcome === 'confirmed' ? 'succeeded_with_warnings' : outcome === 'submitted' || controller.signal.aborted ? 'needs_reconciliation' : 'failed'
+    updateBookingJob(record.id, { status, outcome, error: error.message, logFile, completedAt: new Date().toISOString() }, options)
+  }
+  process.stderr.write(`${outcome === 'confirmed' ? 'Réservation confirmée, erreur après réservation' : 'Échec du lanceur Paris Tennis'} : ${error.message}\n`)
+  process.exitCode = outcome === 'confirmed' ? 0 : 1
 } finally {
-  rmSync(temporaryDirectory, { recursive: true, force: true })
-  if (!checkOnly) rmSync(wrapperFile, { force: true })
+  if (temporaryDirectory) rmSync(temporaryDirectory, { recursive: true, force: true })
+  if (claimed) rmSync(join(options.hermesScriptsDirectory, `tennis-booking-${record.id}.sh`), { force: true })
+  release()
+  process.removeListener('SIGTERM', interrupt)
+  process.removeListener('SIGINT', interrupt)
 }
