@@ -1,123 +1,146 @@
-# par-ici-tennis
+<div align="center">
 
-Réserver et gérer des courts sur [Paris Tennis](https://tennis.paris.fr/), depuis un terminal ou avec le **pilotage agentique d’Hermes dans Telegram sur un VPS**.
+![Par ici Tennis — Moins de refresh. Plus de revers.](docs/assets/par-ici-tennis-hero.svg)
 
-Ce fork de [bertrandda/par-ici-tennis](https://github.com/bertrandda/par-ici-tennis) ajoute le tarif **Gratuité**, la vérification des clubs dans le catalogue officiel, les commandes de gestion du compte et les demandes de réservation programmées avec Hermes.
+# Par ici Tennis
 
-## Sommaire
+**Ton prochain échange commence par un message.**
 
-- [Fonctionnalités](#fonctionnalités)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Trouver un club](#trouver-un-club)
-- [Tester et réserver](#tester-et-réserver)
-- [Consulter et annuler une réservation](#consulter-et-annuler-une-réservation)
-- [Utiliser Hermes et Telegram](#utiliser-hermes-et-telegram)
-- [Gérer les demandes programmées](#gérer-les-demandes-programmées)
-- [CAPTCHA et Hugging Face](#captcha-et-hugging-face)
-- [Calendrier et notifications](#calendrier-et-notifications)
-- [Variables et fichiers locaux](#variables-et-fichiers-locaux)
-- [GitHub Actions](#github-actions)
-- [Diagnostic et validation](#diagnostic-et-validation)
-- [Contribuer](#contribuer)
+Trouve le bon court sur Paris Tennis, prépare ta tentative à l’ouverture
+et gère ta réservation depuis un terminal ou ton bot Telegram avec Hermes.
 
-## Fonctionnalités
+**Gratuité compatible · Clubs par arrondissement · Tentatives à 8 h · Calendrier ICS · Open source**
 
-| Besoin | Commande ou interface principale |
+[Démarrer](#demarrer) · [Voir les exemples Telegram](#telegram) · [Guide complet](docs/guide.md) · [Signaler un problème](https://github.com/RolandVrignon/par-ici-tennis/issues)
+
+</div>
+
+---
+
+## Le plus dur devrait être ton revers
+
+Trouver le nom exact du centre. Vérifier les courts couverts. Se rappeler l’ouverture. Refaire la recherche quand ton premier choix est complet.
+
+**Par ici Tennis prend en charge cette préparation.** Tu choisis les clubs, les horaires et les partenaires ; le script cherche dans ton ordre de préférence, ajoute les joueurs et suit le parcours de réservation de ton compte.
+
+> « Je veux jouer lundi prochain à 18 h, sinon 19 h. Max Rousié d’abord, Jesse Owens ensuite, en couvert, avec Paul Dupont. Programme la tentative à l’ouverture. »
+
+Avec Hermes, la demande devient une tentative ponctuelle sur ton VPS. Tu peux ensuite consulter la réservation, gérer la demande programmée ou demander une annulation depuis la même conversation.
+
+**Une tentative programmée ne garantit pas un terrain.** La disponibilité, la connexion et un éventuel CAPTCHA restent déterminants.
+
+## Le tour du court
+
+- [Ce que le bot fait pour toi](#fonctionnalites)
+- [Parle tennis, pas commandes](#telegram)
+- [Le rendez-vous de 8 h](#programmation)
+- [Tes clubs, tes heures, tes partenaires](#preferences)
+- [Gratuité, tarif réduit ou tarif plein](#tarifs)
+- [Ton premier essai](#demarrer)
+- [Hermes et Telegram sur VPS](#hermes)
+- [Les commandes essentielles](#commandes)
+- [Calendrier et notifications](#notifications)
+- [Ce qu’il faut savoir](#fiabilite)
+- [Documentation et contribution](#documentation)
+
+<a id="fonctionnalites"></a>
+## Un partenaire pour la réservation
+
+| Tu veux… | Par ici Tennis s’en charge |
 | --- | --- |
-| Trouver un club et son libellé exact | `npm run clubs:find -- --query "max rousie"` |
-| Lister les clubs d’un arrondissement | `npm run clubs:list -- --arrondissement 18` |
-| Tester une réservation sans la confirmer | `npm run start-dry-headed` |
-| Réserver immédiatement avec la configuration locale | `npm start` |
-| Lire les réservations présentes sur le compte | `npm run reservations:list` |
-| Prévisualiser ou confirmer une annulation | `npm run reservations:cancel -- --id 'ID_RETOURNE'` |
-| Lister les demandes de réservation programmées | `npm run booking:list` |
-| Installer le skill Hermes | `npm run hermes:install` |
-| Piloter les réservations en langage naturel | Discuter avec Hermes dans Telegram |
+| **Trouver un centre près de chez toi** | Consulte le catalogue officiel et filtre les clubs par arrondissement. |
+| **Utiliser le bon nom** | Résout les accents et la casse, propose les correspondances et signale les ambiguïtés. |
+| **Garder un plan B** | Essaie les clubs dans l’ordre, puis tes heures préférées dans chaque club. |
+| **Choisir ton court** | Filtre les courts couverts ou découverts ; permet de limiter les numéros de courts par centre. |
+| **Profiter de ton tarif** | Gère `Gratuité`, `Tarif réduit` et `Tarif plein` selon les droits déjà actifs sur ton compte. |
+| **Tenter à l’ouverture** | Prépare une demande ponctuelle avec Hermes et lance le navigateur à 8 h, six jours avant le match. |
+| **Tester avant de réserver** | Propose un dry-run visible qui va jusqu’au paiement puis libère la réservation temporaire. |
+| **Gérer la suite** | Consulte la réservation courante, l’annule sur demande et génère un événement ICS après confirmation. |
 
-Une **réservation du compte** existe déjà sur Paris Tennis. Une **demande programmée** décrit une tentative future : elle ne garantit pas qu’un terrain sera disponible. Les commandes `reservations:*` et `booking:*` gèrent respectivement ces deux objets.
+<a id="telegram"></a>
+## Parle tennis, pas commandes
 
-## Installation
+Ces exemples sont des **demandes à envoyer à Hermes**, une fois le projet installé et Telegram connecté.
 
-Prérequis :
+### 📍 Trouver le bon club
 
-- Node.js 22.22.2 ou 24, versions utilisées pour la validation du projet.
-- npm ; le dépôt déclare `npm@11.6.2` dans `packageManager`.
-- Un compte Paris Tennis pour les opérations sur le compte et les réservations.
-- Sous Linux, `flock` pour les scripts de lancement Hermes. Le mode navigateur visible nécessite une session graphique.
+> Quels centres de tennis connais-tu dans le 18e ?
 
-```sh
-git clone URL_DE_VOTRE_FORK
-cd par-ici-tennis
-npm ci
+> Vérifie que Max Rousié existe et donne-moi son libellé exact et son adresse.
+
+### 🎾 Préparer le prochain match
+
+> Programme une réservation pour lundi prochain : Max Rousié puis Jesse Owens, 18 h puis 19 h, en couvert, avec Paul Dupont.
+
+> Prépare la même demande en dry-run : je veux tester sans confirmer de réservation.
+
+### 🗓️ Changer le programme
+
+> Quelles demandes de réservation sont programmées ?
+
+> Pour la demande de lundi, mets 19 h en premier choix et 18 h en second.
+
+> Annule ma demande programmée pour lundi.
+
+### ✅ Gérer la réservation du compte
+
+> Affiche ma réservation actuelle sur Paris Tennis.
+
+> Annule ma réservation de mardi à 18 h.
+
+Hermes vérifie les clubs, conserve le contexte et demande seulement les informations manquantes avant d’agir. Si la date manque, le skill propose une date à partir de J+7 pour préparer une future tentative ; cette indication est recalculée en heure de Paris à chaque conversation. Une **demande programmée** est une tentative future ; une **réservation du compte** existe déjà sur Paris Tennis. Annuler l’une n’annule pas l’autre.
+
+[Le fonctionnement Hermes en détail →](docs/guide.md#utiliser-hermes-et-telegram)
+
+<a id="programmation"></a>
+## Un message aujourd’hui. Une tentative à 8 h.
+
+Le gestionnaire calcule son lancement **six jours calendaires avant la date du terrain**, dans le fuseau Europe/Paris, en tenant compte des changements d’heure.
+
+| Moment | Ce qui se passe |
+| --- | --- |
+| **Tu prépares la demande** | Les clubs, horaires, types de courts et partenaires sont validés. |
+| **Hermes programme** | Il crée un cron ponctuel, attache son identifiant à la demande et vérifie la tâche. |
+| **07 h 55, à J−6 du match** | Le lanceur démarre sur le VPS et attend l’heure prévue. |
+| **08 h 00** | Chromium démarre, puis le script se connecte et cherche selon tes préférences. |
+| **Après la tentative** | Le résultat revient au chat ou topic Telegram d’origine via Hermes. |
+
+Par exemple, un match le **21 septembre** correspond à un lancement le **15 septembre à 8 h** selon cette règle. Le bot ne démarre pas le navigateur avant 8 h et ne garantit pas une réservation à la seconde.
+
+```mermaid
+flowchart LR
+    A[Ta demande] --> B[Validation des clubs et préférences]
+    B --> C[Cron ponctuel Hermes]
+    C --> D[Attente de 8 h]
+    D --> E[Connexion et recherche]
+    E --> F{Mode choisi}
+    F -->|Dry-run| G[Libération du créneau temporaire]
+    F -->|Réel| H[Confirmation sur Paris Tennis]
+    G --> I[Résultat Telegram]
+    H --> I
 ```
 
-L’installation télécharge Chromium via le script `postinstall`. Sous Linux, si des bibliothèques système manquent :
+La demande est figée dans un fichier privé. Au lancement, le script s’exécute sans appel à un modèle pour décider quoi réserver. Une demande terminée ou annulée ne peut pas être rejouée automatiquement.
 
-```sh
-npx playwright install --with-deps chromium
-```
+**Préparer un fichier ne crée pas un cron.** C’est Hermes qui enregistre la tâche. Le lancement direct avec `npm start`, lui, réserve immédiatement.
 
-Pour une nouvelle configuration :
+[Gérer, modifier et annuler une demande programmée →](docs/guide.md#gérer-les-demandes-programmées)
 
-```sh
-cp -n config.fixed.json.sample config.fixed.json
-cp -n config.request.json.sample config.request.json
-chmod 600 config.fixed.json config.request.json
-```
+<a id="preferences"></a>
+## Tes clubs. Tes heures. Tes partenaires.
 
-Compléter les deux fichiers avant de réserver. La date et les partenaires des exemples doivent être remplacés par vos choix. Pour une installation qui possède déjà `config.json`, utiliser la migration ci-dessous avant de créer les fichiers séparés.
+Deux fichiers séparent ce qui reste stable de ce qui change à chaque match :
 
-## Configuration
+| Fichier privé | Contenu |
+| --- | --- |
+| `config.fixed.json` | Compte Paris Tennis, tarifs acceptés, reconnaissance CAPTCHA et notifications. |
+| `config.request.json` | Date, clubs, horaires, types de courts et partenaires. |
 
-### Compte et paramètres fixes
-
-`config.fixed.json` contient les identifiants, le tarif accepté, les paramètres CAPTCHA et les notifications. Exemple pour un compte gratuit :
+Exemple de demande — **remplace la date et le partenaire avant de lancer** :
 
 ```json
 {
-  "account": {
-    "email": "votre-adresse@example.com",
-    "password": "VOTRE_MOT_DE_PASSE"
-  },
-  "priceType": ["Gratuité"],
-  "ai": {
-    "enable": true,
-    "space": "Nischay103/captcha_recognition",
-    "maxAttempts": 2,
-    "timeoutMs": 30000
-  },
-  "ntfy": {
-    "enable": false,
-    "topic": "VOTRE_TOPIC"
-  }
-}
-```
-
-Les blocs `ai` et `ntfy` sont facultatifs. L’absence de `ai` conserve la reconnaissance automatique par défaut.
-
-**Ne jamais committer `config.fixed.json`, `config.request.json` ou l’ancien `config.json`.** Ils sont ignorés par Git. Les partenaires sont aussi des données personnelles : conserver les fichiers de demande avec des permissions restrictives.
-
-### Tarifs acceptés
-
-Les libellés doivent correspondre exactement à ceux de Paris Tennis :
-
-| Valeur dans `priceType` | Condition | Carnet nécessaire pour ce script |
-| --- | --- | --- |
-| `Tarif plein` | Compte au tarif plein | Oui, adapté au tarif et au type de court |
-| `Tarif réduit` | Compte bénéficiant du tarif réduit | Oui, adapté au tarif et au type de court |
-| `Gratuité` | Gratuité déjà activée sur le compte | Non |
-
-Pour le tarif gratuit, utiliser **`"priceType": ["Gratuité"]`**. Les valeurs `Gratuit`, `gratuit` ou `free` ne correspondent pas. Ce paramètre filtre les créneaux ; il ne modifie pas les droits du compte.
-
-Plusieurs valeurs peuvent être acceptées, mais leur ordre ne définit pas une priorité. Le parcours payant utilise un carnet existant. Le parcours gratuit sélectionne la carte « Gratuité », puis « Etape suivante », sans accéder au champ de paiement des comptes payants.
-
-### Préférences de réservation
-
-`config.request.json` contient les paramètres variables :
-
-```json
-{
+  "date": "21/09/2026",
   "locations": ["Max Rousié", "Jesse Owens"],
   "hours": ["18", "19"],
   "courtType": ["Couvert"],
@@ -127,15 +150,9 @@ Plusieurs valeurs peuvent être acceptées, mais leur ordre ne définit pas une 
 }
 ```
 
-| Champ | Utilisation |
-| --- | --- |
-| `locations` | Clubs par ordre de préférence ; leurs noms sont vérifiés avant réservation. |
-| `date` | Date du terrain au format `D/M/YYYY` ou `DD/MM/YYYY`. Facultative en lancement direct : sans date, le script cherche à J+6. Obligatoire pour une demande Hermes. |
-| `hours` | Heures par ordre de préférence, par exemple `["18", "19"]`. |
-| `courtType` | `Couvert`, `Découvert`, ou les deux. |
-| `players` | Un à trois partenaires avec prénom et nom, sans inclure le titulaire du compte. |
+Ce choix signifie : **Max Rousié à 18 h, puis à 19 h ; ensuite Jesse Owens à 18 h, puis à 19 h**. `courtType` filtre les types autorisés ; leur ordre ne définit pas une préférence.
 
-Le script parcourt d’abord les clubs dans l’ordre, puis les heures demandées dans chaque club. Pour limiter les courts d’un club, remplacer le tableau `locations` par un objet :
+Tu peux autoriser `Couvert`, `Découvert` ou les deux, et renseigner un à trois partenaires sans inclure le titulaire du compte. Pour cibler certains courts, `locations` peut aussi prendre cette forme :
 
 ```json
 {
@@ -146,406 +163,165 @@ Le script parcourt d’abord les clubs dans l’ordre, puis les heures demandée
 }
 ```
 
-Les nombres désignent les numéros de courts ; `[]` accepte tous les courts du club. Les types de courts et tarifs restent filtrés.
+Ici, seuls les courts 1 et 2 de Max Rousié sont acceptés ; tous les courts de Suzanne Lenglen restent possibles, sous réserve des autres filtres.
 
-Pour le lancement direct, le dry-run est activé **par la commande `--dry-run`**, pas par un champ dans `config.request.json`. Le booléen `dryRun` est pris en charge dans les demandes préparées pour Hermes.
+Les dates utilisent `D/M/YYYY` ou `DD/MM/YYYY`. Sans date en lancement direct, le script cherche à J+6. Une demande Hermes exige une date explicite.
 
-### Migrer une ancienne configuration
+[Tous les champs et la migration de l’ancien `config.json` →](docs/guide.md#configuration)
 
-Si seul `config.json` existe :
+<a id="tarifs"></a>
+## Gratuité comprise
+
+Le parcours gratuit est intégré au même moteur de réservation que les tarifs payants.
+
+| Ton tarif | Valeur exacte dans `priceType` | Ce qu’il faut prévoir |
+| --- | --- | --- |
+| **Gratuité** | `["Gratuité"]` | Gratuité déjà activée sur ton compte. **Aucun carnet nécessaire.** |
+| **Tarif réduit** | `["Tarif réduit"]` | Un carnet existant adapté au tarif et au type de court. |
+| **Tarif plein** | `["Tarif plein"]` | Un carnet existant adapté au tarif et au type de court. |
+
+Ce paramètre ne change pas tes droits sur Paris Tennis. Le libellé est exact : `Gratuité`, avec son accent, et non `gratuit` ou `free`. Plusieurs tarifs peuvent être acceptés ; leur ordre n’établit pas de priorité.
+
+**Le parcours payant utilise tes carnets : le script ne réalise pas un achat de carnet par carte bancaire.**
+
+<a id="demarrer"></a>
+## Ton premier essai
+
+**Prérequis : Node.js 22.22.2 ou 24, npm et un compte Paris Tennis.** Le catalogue des clubs peut être consulté sans compte. Un navigateur visible nécessite une session graphique.
 
 ```sh
-npm run config:migrate
+git clone https://github.com/RolandVrignon/par-ici-tennis.git
+cd par-ici-tennis
+npm ci
 ```
 
-Cette commande répartit les valeurs dans les deux fichiers, vérifie que leur fusion restitue la configuration initiale, puis **supprime le fichier source `config.json`**. Elle refuse d’écraser des fichiers séparés existants.
-
-Pour conserver la source lors de la migration :
+Chromium est téléchargé à l’installation. Pour une nouvelle configuration :
 
 ```sh
-node scripts/migrate-config.js
+cp -n config.fixed.json.sample config.fixed.json
+cp -n config.request.json.sample config.request.json
+chmod 600 config.fixed.json config.request.json
 ```
 
-Sans migration, `config.json` reste pris en charge tant que les fichiers séparés sont absents. Dès que l’un des deux fichiers séparés existe, le lancement direct exige les deux. La consultation du compte nécessite seulement les paramètres fixes ; la recherche de clubs ne nécessite aucun identifiant.
+Complète ton compte, ton tarif et tes préférences dans ces fichiers. Si tu possèdes déjà un `config.json`, suis d’abord la [migration](docs/guide.md#migrer-une-ancienne-configuration).
 
-## Trouver un club
-
-```sh
-npm run clubs:list
-npm run clubs:list -- --arrondissement 18
-npm run clubs:find -- --query "max rousie"
-npm run clubs:find -- --query "Owens" --arrondissement 18
-```
-
-Le catalogue est lu sur Paris Tennis à chaque appel. Les résultats indiquent le nom officiel, l’identifiant, l’arrondissement, l’adresse et les courts, avec leur caractère couvert ou découvert. Ce catalogue ne prouve pas la disponibilité d’un créneau.
-
-La réponse contient `match` :
-
-| Valeur | Signification |
-| --- | --- |
-| `all` | Liste complète ou filtrée par arrondissement. |
-| `exact` | Correspondance exacte, sans tenir compte des accents ou de la casse ; un identifiant officiel est aussi accepté comme recherche. |
-| `partial` | Le texte apparaît dans un ou plusieurs noms. Une seule dénomination distincte peut être résolue automatiquement. |
-| `suggestions` | Noms proches proposés, ou liste vide. Choisir explicitement un libellé officiel avant de réserver. |
-
-Ainsi, `max rousie` est résolu en **Max Rousié**. Plusieurs sites peuvent partager le même libellé : leurs adresses et identifiants restent visibles. Une ambiguïté entre plusieurs noms ou une simple suggestion bloque la préparation.
-
-Le gestionnaire enregistre les identifiants et libellés vérifiés dans la demande. Au lancement, le script vérifie à nouveau le nom dans le catalogue de la page de recherche et sélectionne la suggestion exacte.
-
-## Tester et réserver
-
-Commencer par un dry-run avec navigateur visible :
+Puis teste le parcours avec le navigateur visible :
 
 ```sh
 npm run start-dry-headed
-```
-
-Le test se connecte, cherche un créneau et va jusqu’à l’étape de paiement. Il annule ensuite la réservation temporaire, avant confirmation. Ce parcours est commun aux tarifs gratuit et payants.
-
-| Commande | Usage |
-| --- | --- |
-| `npm run start-dry` | Dry-run headless, sans fenêtre. |
-| `npm run start-dry-headed` | Dry-run visible, avec saisie manuelle du CAPTCHA en secours. |
-| `npm run start-dry-debug` | Dry-run headless avec diagnostic détaillé. |
-| `npm run start-dry-headed-debug` | Dry-run visible avec diagnostic détaillé. |
-| `npm start` | Réservation réelle immédiate, en headless. |
-| `npm start -- --headed` | Réservation réelle immédiate, avec navigateur visible. |
-
-Pour un compte gratuit, le journal doit contenir `Free price detected`. En mode debug, `dry-run-cancelled status=200` confirme la réponse d’annulation du serveur. Le message « Fausse réservation faite » est affiché **avant** cette annulation : à lui seul, il ne prouve pas qu’elle a réussi.
-
-Vérifier aussi le compte avant le premier lancement réel :
-
-```sh
 npm run reservations:list
 ```
 
-`npm start` ne programme rien : il réserve dès son exécution. Pour une tentative future à l’ouverture, utiliser Hermes.
+Le dry-run se connecte, cherche un créneau, ajoute les partenaires et atteint l’étape de paiement. Il annule ensuite la réservation temporaire **avant confirmation**, quel que soit le tarif. Vérifie le compte après le test : le message « Fausse réservation faite » s’affiche avant l’annulation et ne suffit pas à prouver sa réussite.
 
-## Consulter et annuler une réservation
-
-### Lire le compte
+Une fois ce parcours validé, cette commande effectue une **réservation réelle immédiate** :
 
 ```sh
-npm run reservations:list
-npm run reservations:list -- --headed
+npm start
 ```
 
-La commande lit la page **Ma réservation**. La réponse comporte `source`, `fetchedAt` et un tableau `reservations`. Chaque élément contient :
-
-- `id` : référence locale calculée à partir des détails affichés ; ce n’est pas un numéro de confirmation Paris Tennis ;
-- `details` : détails de la réservation affichés par le site ;
-- `cancellable` : possibilité d’annulation selon le contrôle présent sur la page.
-
-Un tableau vide signifie que le site affiche explicitement l’absence de réservation en cours. Une erreur de connexion ou un format de page inconnu produit une erreur. Cette commande n’importe pas l’historique : l’adaptateur actuel traite la page de réservation courante et refuse une disposition d’annulation ambiguë.
-
-### Annuler une réservation précise
-
-Copier l’`id` retourné par la liste dans les commandes suivantes. Sans `--confirm`, la commande ne soumet aucune annulation :
+Sous Linux, les dépendances système de Chromium peuvent nécessiter `npx playwright install --with-deps chromium`. Pour commencer par une simple recherche de club :
 
 ```sh
-npm run reservations:cancel -- --id 'ID_RETOURNE_PAR_LA_LISTE'
+npm run clubs:list -- --arrondissement 18
+npm run clubs:find -- --query "max rousie"
 ```
 
-Pour annuler réellement cette réservation :
+<a id="hermes"></a>
+## Ton VPS prend le relais
+
+Hermes et sa connexion Telegram doivent être configurés au préalable. L’installateur adapte automatiquement le skill au chemin absolu de ton clone ; `HERMES_HOME` permet de choisir un autre dossier Hermes.
+
+Depuis le dépôt sur le VPS, après installation des dépendances et configuration des fichiers privés :
 
 ```sh
-npm run reservations:cancel -- --id 'ID_RETOURNE_PAR_LA_LISTE' --confirm
-```
-
-Le script relit la réservation, vérifie sa référence et la disponibilité de l’annulation, ouvre la confirmation du site et soumet son formulaire une seule fois. Il contrôle ensuite l’absence de réservation. Le succès est indiqué par `status: "cancelled"` et `verified: true`.
-
-Si la référence a changé, si le site interdit l’annulation ou si le résultat est incertain, consulter à nouveau le compte avant toute nouvelle action. L’annulation d’une réservation confirmée est distincte de la libération d’une réservation temporaire pendant un dry-run.
-
-## Utiliser Hermes et Telegram
-
-Hermes transforme une demande en langage naturel en opération contrôlée. Ce n’est pas un simple raccourci vers `npm start` : l’agent comprend l’intention, demande uniquement les informations manquantes, consulte les données Paris Tennis, conserve le contexte de la conversation et orchestre les commandes du dépôt.
-
-Son parcours agentique est le suivant :
-
-1. comprendre la demande, y compris les dates relatives et l’ordre des préférences ;
-2. calculer la première date réservable à **J+7** en heure de Paris ;
-3. vérifier les clubs dans le catalogue officiel et signaler toute ambiguïté ;
-4. compléter la demande au fil du dialogue sans redemander les informations déjà fournies ;
-5. présenter un récapitulatif précis et obtenir la confirmation avant toute action réelle ;
-6. préparer la configuration temporaire et programmer une seule exécution à l’ouverture ;
-7. restituer le résultat dans le chat Telegram et indiquer clairement les situations à vérifier.
-
-Une fois la demande validée, son exécution est volontairement déterministe : le job ponctuel utilise les paramètres confirmés avec `no_agent=true`. Aucun modèle ne réinterprète la réservation au moment critique.
-
-### Installer le skill sur le VPS
-
-Depuis le clone présent sur le VPS :
-
-```sh
-cd /chemin/vers/par-ici-tennis
 npm run hermes:install
-```
-
-Le skill versionné se trouve dans [skills/tennis-booking/SKILL.md](skills/tennis-booking/SKILL.md). L’installation copie ce fichier dans `~/.hermes/skills/tennis-booking/` et sauvegarde la version précédente. Elle ne crée ni cron ni message Telegram. Hermes et sa connexion Telegram doivent déjà être configurés.
-
-Pour vérifier sa présence :
-
-```sh
 hermes skills list
 ```
 
-L’installateur injecte automatiquement le chemin absolu du clone courant dans la copie locale du skill. Le fichier versionné reste donc portable et ne contient aucun chemin utilisateur. `HERMES_HOME` permet de choisir un autre dossier Hermes. Node.js et npm doivent être accessibles dans le `PATH` de l’utilisateur qui exécute l’installation.
+Le skill [tennis-booking](skills/tennis-booking/SKILL.md) regroupe la recherche de clubs, la gestion de la réservation du compte et la préparation des demandes programmées. L’installateur sauvegarde la version précédente ; il ne crée aucune tâche et n’envoie aucun message.
 
-### Exemples de conversations agentiques
+Le lanceur utilise `flock` sous Linux pour sérialiser les opérations. Les identifiants restent dans la configuration privée du VPS ; ils ne doivent pas figurer dans les prompts, les noms de crons ou les messages Telegram.
 
-#### Partir d’une demande incomplète
+[Installation VPS et configuration Hermes →](docs/guide.md#installer-le-skill-sur-le-vps)
 
-> **Vous —** Je peux réserver un terrain ?
->
-> **Hermes —** Oui. Donne-moi :
->
-> - **La date** (à partir du 18/09) et **les horaires souhaités**, par ordre de préférence.
-> - Les **centres**, par ordre de préférence.
-> - **Couvert, découvert ou indifférent**.
-> - Le **prénom et le nom des partenaires** (1 à 3, sans te compter).
+<a id="commandes"></a>
+## Les commandes à garder sous la main
 
-Dans cet exemple, la conversation a lieu le 11/09. Hermes ne conserve pas cette date en dur : il recalcule automatiquement le libellé « à partir du JJ/MM » à J+7 pour chaque nouvelle conversation.
-
-#### Compléter, vérifier et confirmer
-
-> **Vous —** Le 21 septembre à 18 h, sinon 19 h. Max Rousié, en couvert, avec Paul Dupont.
->
-> **Hermes —** J’ai vérifié le libellé officiel **Max Rousié**. Je programmerai une tentative pour le **21/09 à 18 h**, puis **19 h** en second choix, en **couvert**, avec **Paul Dupont**. Les créneaux ouvrent le **15/09 à 8 h** ; le job sera préparé à **7 h 55**. Dois-je confirmer cette programmation ?
-
-Hermes ne programme rien avant la confirmation. Une fois celle-ci reçue, il crée la demande protégée, programme le job ponctuel, attache son identifiant et confirme ce qui a réellement été enregistré.
-
-#### Modifier une demande en conservant le contexte
-
-> **Vous —** Finalement, mets 19 h en premier et ajoute Jesse Owens en deuxième choix.
->
-> **Hermes —** Je conserve la date, le type de court et le partenaire. Nouvelle priorité des horaires : **19 h**, puis **18 h**. Ordre des centres : **Max Rousié**, puis **Jesse Owens**. Je vérifie le second club et te présente le récapitulatif avant de modifier la demande programmée.
-
-L’agent réutilise les paramètres déjà confirmés, vérifie la nouvelle information et ne modifie que la demande identifiée. Un changement de date entraîne la création contrôlée d’un nouveau job plutôt que le déplacement silencieux de l’ancien.
-
-#### Interroger et agir sur l’état réel
-
-Quelques formulations possibles :
-
-- « Quels clubs Paris Tennis sont dans le 18e ? »
-- « Est-ce que Max Rousié existe ? »
-- « Liste mes réservations sur Paris Tennis. »
-- « Quelles demandes ai-je programmées ? »
-- « Annule ma réservation de mardi à 18 h. »
-- « Annule ma demande programmée pour le 21 septembre. »
-
-Hermes distingue une réservation déjà présente sur le compte d’une tentative future programmée. Avant une action réelle, il résout précisément l’objet concerné, lève les ambiguïtés et s’appuie sur l’autorisation explicite de l’utilisateur. Il utilise les commandes sécurisées du dépôt plutôt que d’inventer son propre parcours de réservation.
-
-### Déroulement d’une réservation programmée
-
-1. Le helper valide la date, les clubs, les heures et les partenaires.
-2. Il calcule l’ouverture **six jours calendaires avant la date du terrain**, en `Europe/Paris`, en recalculant les décalages été/hiver.
-3. Hermes crée un job ponctuel pour **7 h 55**, avec `no_agent=true` : aucun modèle ne décide quoi réserver au moment du lancement.
-4. Le lanceur attend **8 h**, puis démarre Chromium et la connexion au compte.
-5. Le résultat est remis au chat/topic Telegram d’origine via Hermes.
-
-**8 h est l’heure de lancement du navigateur, pas une garantie de confirmation à 8 h.** Le réseau, la connexion, le CAPTCHA et la disponibilité du terrain influencent le résultat. Le lanceur refuse un départ plus de dix minutes avant l’ouverture ou plus d’une heure après.
-
-Les paramètres variables restent dans une demande protégée. La configuration complète contenant les identifiants est créée temporairement avec le mode `600` juste avant l’exécution, puis supprimée lors du nettoyage du lanceur. Les demandes terminées ou annulées ne peuvent pas être rejouées.
-
-## Gérer les demandes programmées
-
-### Préparer et attacher une demande
-
-Créer un fichier de demande complet, avec une date explicite et, pour un test, le booléen `dryRun: true` :
-
-```json
-{
-  "date": "21/09/2026",
-  "locations": ["Max Rousié"],
-  "hours": ["18", "19"],
-  "courtType": ["Couvert"],
-  "players": [{ "firstName": "PRENOM", "lastName": "NOM" }],
-  "dryRun": true
-}
-```
-
-Remplacer les exemples avant utilisation. Sans `dryRun`, la demande préparée est une demande de réservation réelle. Une chaîne comme `"true"` est refusée : utiliser un booléen JSON.
-
-```sh
-chmod 600 /chemin/demande.json
-npm run booking:manage -- prepare --input /chemin/demande.json
-```
-
-`prepare` crée une demande locale et un script de lancement ; **il ne crée pas le cron Hermes**. La réponse fournit notamment `requestId`, `schedule`, `bookingOpensAt`, `cronName` et `script`.
-
-Le [skill Hermes](skills/tennis-booking/SKILL.md) décrit la création du cron avec ces valeurs, `no_agent=true`, le dossier de travail du dépôt et la livraison au chat d’origine. Une fois le cron créé :
-
-```sh
-npm run booking:manage -- attach --request-id 'ID_DE_DEMANDE' --cron-job-id 'ID_DU_CRON_HERMES'
-```
-
-L’option `prepare --consume` supprime le fichier d’entrée même si la préparation échoue. Elle est réservée aux fichiers `/tmp/tennis-booking-request-*.json` utilisés par Hermes.
-
-### Lister, modifier et annuler
-
-```sh
-npm run booking:list
-npm run booking:manage -- show --request-id 'ID_DE_DEMANDE'
-npm run booking:manage -- edit --request-id 'ID_DE_DEMANDE' --input /chemin/demande-modifiee.json
-npm run booking:manage -- cancel --request-id 'ID_DE_DEMANDE'
-```
-
-`edit` attend une demande complète, vérifie les clubs et conserve la même date d’ouverture et le même cron. Pour changer de date, annuler la demande puis en préparer et programmer une nouvelle. Une demande en cours ou terminée n’est pas modifiable.
-
-`cancel` désactive l’exécution locale et conserve le dossier de suivi. Il faut aussi retirer le cron associé dans Hermes. Il ne supprime aucune réservation du compte et refuse d’interrompre une demande déjà en cours.
-
-Si la création du cron a échoué, supprimer une demande encore `prepared` avec :
-
-```sh
-npm run booking:manage -- cleanup --request-id 'ID_DE_DEMANDE'
-```
-
-`booking:list` affiche les dossiers gérés par ce helper. Il ne recense pas les crons Linux ou les autres tâches Hermes. Utiliser le gestionnaire Hermes pour les nouvelles demandes.
-
-### Comprendre les statuts
-
-| Statut | Signification |
-| --- | --- |
-| `prepared` | Demande préparée ; cron pas encore attaché. |
-| `scheduled` | Identifiant du cron enregistré. |
-| `running` | Lanceur démarré, éventuellement encore en attente de 8 h. |
-| `succeeded` | Réservation confirmée. |
-| `succeeded_with_warnings` | Réservation confirmée, puis erreur dans une étape suivante. Ne pas réserver à nouveau. |
-| `dry_run_succeeded` | Dry-run terminé avec annulation vérifiée. |
-| `unavailable` | Exécution terminée sans réservation trouvée. |
-| `failed` | Exécution en échec. Consulter le journal. |
-| `needs_reconciliation` | Résultat incertain, notamment après soumission ou interruption. Vérifier le compte avant une nouvelle tentative. |
-| `cancelled` | Demande future désactivée localement. |
-
-Le lanceur reçoit des événements structurés de confirmation et d’annulation. Une erreur d’écriture ICS après confirmation ne transforme donc pas une réservation réussie en réservation échouée.
-
-Pour vérifier une demande sans lancer de navigateur ni modifier son statut :
-
-```sh
-node scripts/run-booking-request.js --request /chemin/vers/ID_DE_DEMANDE.json --check
-```
-
-## CAPTCHA et Hugging Face
-
-La reconnaissance automatique traite les CAPTCHAs textuels LiveIdentity lorsqu’ils apparaissent. Le Space par défaut est [Nischay103/captcha_recognition](https://huggingface.co/spaces/Nischay103/captcha_recognition).
-
-**Aucune clé API Hugging Face n’est configurée ni envoyée par l’intégration actuelle.** Elle utilise l’accès public au Space. Celui-ci peut être indisponible ou changer ses conditions d’accès ; ajouter arbitrairement une clé dans le JSON n’active pas une authentification.
-
-Seule l’image du CAPTCHA est transmise au Space, pas les identifiants ni la page complète. Sans CAPTCHA, aucun appel de reconnaissance n’est effectué.
-
-| Paramètre `ai` | Défaut | Rôle |
+| Action | Commande | Effet |
 | --- | --- | --- |
-| `enable` | `true` | `false` désactive la reconnaissance automatique. |
-| `space` | `Nischay103/captcha_recognition` | Space Gradio compatible avec `/predict`, entrée image `input` et résultat textuel. |
-| `maxAttempts` | `2` | Nombre de tentatives, plafonné à 3. |
-| `timeoutMs` | `30000` | Délai d’appel au fournisseur, plafonné à 60 secondes. |
+| Consulter les clubs | `npm run clubs:list` | Lit le catalogue officiel. |
+| Résoudre un nom | `npm run clubs:find -- --query "max rousie"` | Recherche le libellé exact. |
+| Tester en visible | `npm run start-dry-headed` | Parcours de réservation temporaire, puis annulation. |
+| Tester sans fenêtre | `npm run start-dry` | Même test en headless. |
+| **Réserver maintenant** | `npm start` | **Confirme une réservation réelle** si un créneau compatible est trouvé. |
+| Consulter le compte | `npm run reservations:list` | Lit la réservation courante sur Paris Tennis. |
+| Prévisualiser une annulation | `npm run reservations:cancel -- --id 'ID'` | Vérifie la réservation sans soumettre l’annulation. |
+| **Annuler réellement** | `npm run reservations:cancel -- --id 'ID' --confirm` | **Soumet l’annulation** de la réservation identifiée et vérifie le résultat. |
+| Voir les demandes futures | `npm run booking:list` | Affiche les demandes gérées par le helper Hermes. |
 
-En headless, l’échec de reconnaissance arrête l’exécution. Avec `--headed`, le script laisse la possibilité de saisir la réponse manuellement dans la limite du délai de l’étape, jusqu’à cinq minutes.
+Pour annuler, utilise l’ID renvoyé par `reservations:list`. C’est une référence locale des détails affichés, pas un numéro de confirmation Paris Tennis. La consultation actuelle ne constitue pas un historique complet du compte.
 
-Le script attend l’acceptation par le site et gère le remplacement ou le détachement de l’iframe pendant la navigation. Un CAPTCHA rejeté reste un échec de validation : la reconnaissance n’est garantie dans aucun mode. Les puzzles demandant de sélectionner des images ne sont pas pris en charge.
+[Gestion des réservations](docs/guide.md#consulter-et-annuler-une-réservation) · [Statuts et demandes futures](docs/guide.md#comprendre-les-statuts)
 
-## Calendrier et notifications
+<a id="notifications"></a>
+## Du créneau au calendrier
 
-Après confirmation, le script génère `event.ics` en exécution locale. Avec GitHub Actions, il n’écrit pas ce fichier sur disque. Les notifications ntfy peuvent transmettre le fichier ICS après réservation ou une capture lors d’une erreur.
+Après confirmation, le lancement local génère **`event.ics`**, prêt à importer dans ton calendrier. Les notifications **ntfy** peuvent transmettre cet événement ; les jobs **Hermes** livrent séparément leur résumé dans le chat Telegram d’origine.
 
-Pour les activer, ajouter dans `config.fixed.json` un bloc `ntfy` :
+Les notifications sont configurables dans `config.fixed.json`. Une erreur de notification ou d’écriture du calendrier après confirmation ne doit pas déclencher une nouvelle réservation.
 
-```json
-{
-  "ntfy": {
-    "enable": true,
-    "topic": "VOTRE_TOPIC_DIFFICILE_A_DEVINER",
-    "domain": "ntfy.sh"
-  }
-}
-```
+[Activer ntfy et comprendre la génération ICS →](docs/guide.md#calendrier-et-notifications)
 
-S’abonner au même topic depuis l’application ou le [site ntfy](https://ntfy.sh). Le topic peut contenir des informations de réservation ; choisir un nom difficile à deviner ou un serveur dont vous contrôlez l’accès. `domain` est facultatif et vaut `ntfy.sh` par défaut.
+<a id="fiabilite"></a>
+## Ce qu’il faut savoir avant le premier service
 
-La livraison Telegram des jobs Hermes fonctionne séparément de ntfy. Le lanceur retourne un résumé ; Hermes assure sa livraison au chat d’origine.
+### CAPTCHA : automatique quand possible, manuel en secours
 
-## Variables et fichiers locaux
+L’intégration tente de reconnaître les CAPTCHAs textuels lorsqu’ils apparaissent via un Space Hugging Face configuré. Le code utilise son accès public **sans clé API** et transmet seulement l’image du CAPTCHA. La disponibilité du fournisseur et la reconnaissance ne sont pas garanties.
 
-| Variable | Usage |
+En cas d’échec, le mode visible permet une saisie manuelle dans le délai de l’étape. En headless, l’exécution s’arrête. Les puzzles de sélection d’images ne sont pas pris en charge. Un lancement pendant ton sommeil peut donc échouer sans intervention.
+
+[Paramètres, fournisseur et diagnostic CAPTCHA →](docs/guide.md#captcha-et-hugging-face)
+
+### Des résultats lisibles
+
+Le gestionnaire distingue une réservation confirmée, un dry-run terminé avec annulation vérifiée, un créneau indisponible et un résultat incertain. Il conserve les traces nécessaires à la vérification et empêche de rejouer automatiquement une demande terminée.
+
+L’annulation d’une réservation confirmée dispose de tests sur formulaire simulé. Ils ne garantissent pas tous les parcours du site réel. Le dry-run vérifie la libération de sa réservation temporaire ; ce sont deux opérations différentes.
+
+Les configurations, partenaires, journaux et captures restent privés et ignorés par Git. Un changement d’interface, une session ou un CAPTCHA peuvent nécessiter une intervention. Les protections locales supposent un dossier d’état partagé par compte ; elles ne coordonnent pas plusieurs machines indépendantes.
+
+<a id="documentation"></a>
+## Sous le capot, tout reste accessible
+
+**Node.js · Playwright · Chromium · Hermes · Telegram · ntfy · ICS**
+
+| Pour aller plus loin | Ressource |
 | --- | --- |
-| `TENNIS_CONFIG_PATH` | Chemin vers une configuration complète, prioritaire sur les fichiers séparés. Utilisé par le lanceur pour la configuration temporaire. |
-| `TENNIS_FIXED_CONFIG_PATH` | Chemin des paramètres fixes ; défaut : `config.fixed.json` à la racine du dépôt. |
-| `TENNIS_REQUEST_CONFIG_PATH` | Chemin des préférences pour le lancement direct ; défaut : `config.request.json`. |
-| `TENNIS_BOOKING_STATE_DIR` | Dossiers des demandes ; défaut : `~/.local/state/par-ici-tennis/bookings`. |
-| `HERMES_HOME` | Dossier Hermes ; défaut : `~/.hermes`. |
-| `HERMES_SCRIPTS_DIR` | Dossier des scripts de lancement Hermes ; défaut : `scripts/` dans le dossier Hermes. |
-| `TENNIS_NODE_BINARY` | Exécutable Node utilisé dans les scripts générés ; défaut : celui de la préparation. |
-| `ACCOUNT_EMAIL`, `ACCOUNT_PASSWORD` | Identifiants de secours si les valeurs correspondantes sont absentes de la configuration. |
-| `NTFY_TOPIC`, `NTFY_DOMAIN` | Paramètres ntfy transmis par l’environnement, notamment dans les workflows GitHub. |
+| Installer, configurer, migrer et dépanner | [Guide complet](docs/guide.md) |
+| Comprendre les actions du bot Telegram | [Skill tennis-booking](skills/tennis-booking/SKILL.md) |
+| Programmer et gérer une demande future | [Gestionnaire Hermes](docs/guide.md#gérer-les-demandes-programmées) |
+| Exécuter depuis GitHub Actions | [Workflows et secrets](docs/guide.md#github-actions) |
+| Diagnostiquer un échec | [Diagnostic et validation](docs/guide.md#diagnostic-et-validation) |
 
-La préparation Hermes exige les identifiants dans les paramètres fixes. Elle ne remplace pas cette validation par les variables `ACCOUNT_*`.
-
-Les demandes sont stockées en mode `600`, dans un dossier en mode `700`. Utiliser un même dossier d’état par compte pour partager le verrou d’exécution. Les opérations de réservation et d’annulation confirmée sont sérialisées. Un verrou `.operation-lock` laissé après une interruption demande de vérifier le processus et le compte avant de le retirer.
-
-| Fichier ou dossier | Contenu |
-| --- | --- |
-| `config.fixed.json` | Compte, tarifs, CAPTCHA et ntfy. |
-| `config.request.json` | Préférences locales de réservation. |
-| `logs/hermes/` | Journaux des demandes exécutées. |
-| `img/failure.png` | Capture lors d’un échec du script de réservation. |
-| `img/captcha/` | Images des CAPTCHAs enregistrées en mode debug. |
-| `event.ics` | Événement calendrier après réservation. |
-
-Ces fichiers du dépôt sont ignorés par Git. Les captures et journaux peuvent contenir des données du compte ; les relire avant de les partager.
-
-## GitHub Actions
-
-Les workflows restent disponibles en complément du VPS :
-
-- [Tennis booking dry-run](.github/workflows/book-tennis-dry.yml) : test lancé manuellement ;
-- [Tennis booking](.github/workflows/book-tennis.yml) : tentative réelle, déclenchement programmé déclaré à 7 h 45 `Europe/Paris`, puis attente jusqu’à 8 h ;
-- [Pull request tests](.github/workflows/pr-tests.yml) : installation des dépendances et ESLint. La suite `npm test` n’est pas exécutée par ce workflow actuel.
-
-Dans **Settings → Secrets and variables → Actions**, renseigner :
-
-| Type | Nom | Contenu |
-| --- | --- | --- |
-| Secret | `ACCOUNT_EMAIL` | Identifiant Paris Tennis. |
-| Secret | `ACCOUNT_PASSWORD` | Mot de passe Paris Tennis. |
-| Secret facultatif | `NTFY_TOPIC`, `NTFY_DOMAIN` | Configuration ntfy. |
-| Variable | `CONFIG_JSON` | Configuration complète sans identifiants ni données secrètes, incluant notamment `priceType`, `locations`, `hours`, `courtType` et `players`. |
-
-Les workflows écrivent cette variable dans un `config.json` temporaire au format historique. Omettre `date` pour chercher à J+6 ; ne jamais placer les identifiants dans `CONFIG_JSON`.
-
-Tester avec le workflow dry-run avant d’activer le workflow réel. Le workflow réel tente de se désactiver après chaque exécution, y compris en cas d’échec ; le réactiver pour une autre tentative. **Un déclenchement manuel du workflow réel réserve immédiatement**, sans attente de 8 h. Les délais de démarrage GitHub et ceux du site empêchent de garantir une réservation à une seconde précise.
-
-## Diagnostic et validation
+Une idée, un parcours qui change ou un problème reproductible ? Ouvre une [issue](https://github.com/RolandVrignon/par-ici-tennis/issues) ou une [pull request](https://github.com/RolandVrignon/par-ici-tennis/pulls), avec les étapes utiles et sans données privées.
 
 ```sh
 npm run eslint
 npm test
 ```
 
-Les tests locaux couvrent notamment les correspondances de clubs, les tarifs via la configuration, les transitions CAPTCHA, les changements d’heure, les statuts du lanceur, le refus des relances et l’annulation sur formulaire simulé.
+Ce fork prolonge le travail de [Bertrand d’Aure](https://github.com/bertrandda/par-ici-tennis). Projet indépendant, non affilié à la Ville de Paris. Distribué sous [licence MIT](LICENSE).
 
-Pour diagnostiquer une recherche réelle sans confirmer de réservation :
+---
 
-```sh
-npm run start-dry-debug
-npm run start-dry-headed-debug
-```
+<div align="center">
 
-Le mode debug affiche les étapes, la navigation, les réponses CAPTCHA, les résultats de reconnaissance et la réponse d’annulation du dry-run. Il conserve aussi l’image exacte envoyée à Hugging Face.
+**Tu joues aussi au padel ?** Retrouve la même approche avec [Paris Padel · Anybotty](https://github.com/RolandVrignon/paris-padel-anybotty).
 
-| Symptôme | Vérification |
-| --- | --- |
-| Club inconnu ou ambigu | Relancer `clubs:find`, puis reprendre le libellé exact. |
-| CAPTCHA refusé ou fournisseur indisponible | Examiner les logs ; essayer le mode visible pour une saisie manuelle. |
-| Page inconnue ou erreur serveur | Vérifier le site et le compte ; une erreur n’est pas une preuve d’absence de réservation. |
-| Demande déjà terminée | Lire son statut et les réservations du compte ; ne pas réinitialiser son statut pour la rejouer. |
-| Résultat incertain après soumission | Lancer `reservations:list` et vérifier le compte avant une autre tentative. |
-| Verrou présent | Vérifier le processus actif et la situation du compte avant intervention. |
-| `npm` absent dans SSH | Charger le chemin de l’installation Node/npm utilisée sur le VPS. |
+**La réservation se prépare ici. Le match se joue sur le court.**
 
-L’annulation d’une réservation confirmée dispose de tests en simulation. Une lecture réelle d’un compte vide valide le parcours de consultation, mais ne constitue pas un test réel d’annulation. Le dry-run, lui, vérifie la libération de sa réservation temporaire.
+[Démarrer](#demarrer) · [Ouvrir le guide](docs/guide.md) · [Voir le code](https://github.com/RolandVrignon/par-ici-tennis)
 
-## Contribuer
-
-Utiliser les onglets **Issues** ou **Pull requests** du dépôt qui héberge le fork. Exécuter ESLint et les tests adaptés aux changements, sans inclure de configuration privée, journal du compte ou capture personnelle.
-
-Projet initial : [bertrandda/par-ici-tennis](https://github.com/bertrandda/par-ici-tennis). Licence MIT — voir [LICENSE](LICENSE).
+</div>
